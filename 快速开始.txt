@@ -1,0 +1,17 @@
+========================================
+  桌面影音播放器 - 快速开始
+========================================
+
+1. 运行安装脚本：
+   ./install.sh
+
+2. 启动服务器：
+   python3 video_server.py "/path/to/your/video/root"
+
+3. 运行 App：
+   flutter run -d macos
+
+4. 在 App 中连接服务器：
+   输入：http://localhost:8081
+
+详细说明请查看：README_安装说明.md
