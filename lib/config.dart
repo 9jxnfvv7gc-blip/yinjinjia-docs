@@ -6,21 +6,23 @@
 class AppConfig {
   // ========== 云端API服务器配置 ==========
   
-  /// 生产环境API服务器地址
-  /// TODO: 替换为你的实际服务器地址
-  static const String productionApiUrl = 'https://your-api-server.com';
+  /// 生产环境API服务器地址（服务器部署）
+  static const String productionApiUrl = 'http://47.243.177.166:8081';
   
-  /// 开发环境API服务器地址
-  /// 可以是本地开发服务器或测试服务器
+  /// 开发环境API服务器地址（本地开发）
   static const String developmentApiUrl = 'http://localhost:8081';
   
   /// 当前使用的API服务器地址
   /// 根据构建类型自动选择（开发/生产）
   static String get apiBaseUrl {
-    // TODO: 根据Flutter的构建模式自动切换
-    // 暂时使用开发环境，后续可以通过环境变量控制
+    // 发布版本使用服务器地址，调试版本使用本地地址
     const bool isProduction = bool.fromEnvironment('PRODUCTION', defaultValue: false);
-    return isProduction ? productionApiUrl : developmentApiUrl;
+    // 或者根据kDebugMode判断
+    if (isProduction) {
+      return productionApiUrl;
+    }
+    // 默认使用服务器地址（让所有用户都能看到内容）
+    return productionApiUrl;
   }
   
   // ========== 阿里云OSS配置 ==========

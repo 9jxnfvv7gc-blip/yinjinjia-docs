@@ -621,9 +621,31 @@ class VideoHandler(http.server.SimpleHTTPRequestHandler):
             
         elif self.path.startswith('/api/list/'):
             # 返回某个分类下的视频列表（支持二级分类：父分类/子分类）
-            category = unquote(self.path.replace('/api/list/', ''))
+            import sys
+            # 获取原始路径
+            raw_category = self.path.replace('/api/list/', '')
+            # 尝试解码（可能已经编码，也可能没有）
+            try:
+                # 先尝试解码（如果已经编码）
+                category = unquote(raw_category)
+                # 如果解码后和原始相同，说明没有编码，直接使用
+                if category == raw_category:
+                    category = raw_category
+            except:
+                # 如果解码失败，直接使用原始值
+                category = raw_category
+            
             # 支持二级分类路径（包含 "/"）
             category_path = os.path.join(VIDEO_ROOT, category)
+            
+            # 调试信息（使用sys.stderr确保输出到日志）
+            sys.stderr.write(f"原始路径: {self.path}\n")
+            sys.stderr.write(f"原始category: {raw_category}\n")
+            sys.stderr.write(f"解码后category: {category}\n")
+            sys.stderr.write(f"API列表请求: category={category}, category_path={category_path}\n")
+            sys.stderr.write(f"VIDEO_ROOT: {VIDEO_ROOT}\n")
+            sys.stderr.write(f"路径存在: {os.path.exists(category_path)}\n")
+            sys.stderr.flush()
             
             self.send_response(200)
             self.send_header('Content-type', 'application/json')
@@ -636,11 +658,15 @@ class VideoHandler(http.server.SimpleHTTPRequestHandler):
             all_media_extensions = video_extensions + music_extensions
             
             if os.path.exists(category_path):
+                sys.stderr.write(f"目录存在，开始扫描文件...\n")
+                sys.stderr.flush()
                 file_list = []
                 for f in os.listdir(category_path):
                     file_path = os.path.join(category_path, f)
                     if os.path.isfile(file_path):
                         ext = os.path.splitext(f)[1].lower()
+                        sys.stderr.write(f"文件: {f}, 扩展名: {ext}, 在列表中: {ext in all_media_extensions}\n")
+                        sys.stderr.flush()
                         if ext in all_media_extensions:
                             # 获取文件修改时间（上传时间）
                             file_stat = os.stat(file_path)
@@ -651,15 +677,32 @@ class VideoHandler(http.server.SimpleHTTPRequestHandler):
                             # 根据文件类型选择 URL 前缀
                             url_prefix = '/music/' if ext in music_extensions else '/video/'
                             
-                            title = os.path.splitext(f)[0]
+                            # 使用完整文件名作为title
+                            title = f
+                            
+                            # 构建完整的URL（使用服务器IP）
+                            # 获取服务器IP（从请求头或使用默认值）
+                            server_host = self.headers.get('Host', '47.243.177.166:8081')
+                            # 如果Host是localhost，使用服务器IP
+                            if 'localhost' in server_host or '127.0.0.1' in server_host:
+                                server_host = '47.243.177.166:8081'
+                            if ':' not in server_host:
+                                server_host = f"{server_host}:8081"
+                            # 使用url_prefix构建完整URL
+                            full_url = f"http://{server_host}{url_prefix}{relative_path.replace(os.sep, '/')}"
                             
                             file_list.append({
                                 'title': title,
-                                'url': f'{url_prefix}{relative_path}',
-                                'id': file_path,
+                                'url': full_url,
+                                'id': f,  # 使用文件名作为id
                                 'filename': f,
                                 'modified_time': modified_time
                             })
+                
+                sys.stderr.write(f"找到 {len(file_list)} 个文件\n")
+                sys.stderr.write(f"file_list内容: {file_list}\n")
+                sys.stderr.write(f"videos长度（添加前）: {len(videos)}\n")
+                sys.stderr.flush()
                 
                 # 尝试加载保存的排序顺序
                 order_file = os.path.join(VIDEO_ROOT, '.file_orders.json')
@@ -750,7 +793,15 @@ class VideoHandler(http.server.SimpleHTTPRequestHandler):
                         'url': item['url'],
                         'id': item['id']
                     })
+                sys.stderr.write(f"videos长度（添加后）: {len(videos)}\n")
+                sys.stderr.write(f"videos内容: {videos}\n")
+                sys.stderr.flush()
+            else:
+                sys.stderr.write(f"目录不存在: {category_path}\n")
+                sys.stderr.flush()
             
+            sys.stderr.write(f"最终返回videos长度: {len(videos)}\n")
+            sys.stderr.flush()
             self.wfile.write(json.dumps(videos, ensure_ascii=False).encode('utf-8'))
             
         elif self.path.startswith('/video/') or self.path.startswith('/music/'):

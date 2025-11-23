@@ -203,4 +203,18 @@ MediaCategory? findMusicCategoryByChineseName(String name) {
   }
 }
 
+/// 简化的媒体项模型
+class SimpleMediaItem {
+  final String id;
+  final String title;
+  final String url;
+  final String type; // 'video' 或 'music'
+
+  const SimpleMediaItem({
+    required this.id,
+    required this.title,
+    required this.url,
+    required this.type,
+  });
+}
 

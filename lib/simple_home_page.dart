@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart';
 import 'dart:io';
+import 'dart:async';
 import 'dart:convert';
 import 'package:file_picker/file_picker.dart';
 import 'package:http/http.dart' as http;
@@ -133,34 +134,82 @@ class _SimpleHomePageState extends State<SimpleHomePage> {
 
   /// 上传内容
   Future<void> _uploadContent(String type) async {
+    if (!mounted) return;
+    
     try {
+      debugPrint('开始上传流程: $type');
+      
+      // 在macOS上，先显示提示，避免黑屏
+      if (Platform.isMacOS) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('正在打开文件选择器...\n提示：按住Cmd键可以多选文件'),
+            duration: Duration(seconds: 3),
+          ),
+        );
+        // 给一点时间让提示显示
+        await Future.delayed(const Duration(milliseconds: 300));
+      }
+      
       // 根据平台和类型选择文件选择器配置
       FilePickerResult? result;
       
-      if (kIsWeb) {
-        // Web平台
-        result = await FilePicker.platform.pickFiles(
-          type: type == 'video' ? FileType.video : FileType.audio,
-          allowMultiple: false,
-        );
-      } else if (Platform.isIOS) {
-        // iOS平台：使用any类型，让用户可以选择任何文件
-        result = await FilePicker.platform.pickFiles(
-          type: FileType.any,
-          allowedExtensions: type == 'video' 
-              ? ['mp4', 'mov', 'avi', 'mkv', 'm4v'] 
-              : ['mp3', 'm4a', 'wav', 'aac', 'flac'],
-          allowMultiple: false,
-        );
-      } else {
-        // macOS和其他平台：使用custom类型，明确指定扩展名
-        result = await FilePicker.platform.pickFiles(
-          type: FileType.custom,
-          allowedExtensions: type == 'video' 
-              ? ['mp4', 'mov', 'avi', 'mkv', 'm4v', 'wmv', 'flv', 'webm'] 
-              : ['mp3', 'm4a', 'wav', 'aac', 'flac', 'ogg', 'wma', 'opus'],
-          allowMultiple: false,
-        );
+      try {
+        if (kIsWeb) {
+          // Web平台
+          result = await FilePicker.platform.pickFiles(
+            type: type == 'video' ? FileType.video : FileType.audio,
+            allowMultiple: true, // 支持批量选择
+          );
+        } else if (Platform.isIOS) {
+          // iOS平台：使用any类型，让用户可以选择任何文件
+          result = await FilePicker.platform.pickFiles(
+            type: FileType.any,
+            allowedExtensions: type == 'video' 
+                ? ['mp4', 'mov', 'avi', 'mkv', 'm4v'] 
+                : ['mp3', 'm4a', 'wav', 'aac', 'flac'],
+            allowMultiple: true, // 支持批量选择
+          );
+        } else if (Platform.isMacOS) {
+          // macOS平台：使用custom类型，可以访问所有卷（包括Expansion）
+          // 注意：FileType.any 不能使用 allowedExtensions，必须使用 FileType.custom
+          debugPrint('macOS: 打开文件选择器');
+          result = await FilePicker.platform.pickFiles(
+            type: FileType.custom,
+            allowedExtensions: type == 'video' 
+                ? ['mp4', 'mov', 'avi', 'mkv', 'm4v', 'wmv', 'flv', 'webm'] 
+                : ['mp3', 'm4a', 'wav', 'aac', 'flac', 'ogg', 'wma', 'opus'],
+            allowMultiple: true, // 支持批量选择
+            dialogTitle: '选择${type == 'video' ? '视频' : '音乐'}文件（可多选）',
+          ).timeout(
+            const Duration(seconds: 30),
+            onTimeout: () {
+              debugPrint('文件选择器超时');
+              return null;
+            },
+          );
+          debugPrint('macOS: 文件选择器返回结果: ${result != null}');
+        } else {
+          // 其他平台：使用custom类型
+          result = await FilePicker.platform.pickFiles(
+            type: FileType.custom,
+            allowedExtensions: type == 'video' 
+                ? ['mp4', 'mov', 'avi', 'mkv', 'm4v', 'wmv', 'flv', 'webm'] 
+                : ['mp3', 'm4a', 'wav', 'aac', 'flac', 'ogg', 'wma', 'opus'],
+            allowMultiple: true, // 支持批量选择
+          );
+        }
+      } catch (pickerError) {
+        debugPrint('文件选择器错误: $pickerError');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('文件选择器错误: ${pickerError.toString()}'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+        return;
       }
 
       if (result == null || result.files.isEmpty) {
@@ -177,101 +226,183 @@ class _SimpleHomePageState extends State<SimpleHomePage> {
         return;
       }
 
-      final pickedFile = result.files.single;
-      final filePath = pickedFile.path;
+      // 支持批量上传
+      final files = result.files;
+      final totalFiles = files.length;
       
-      if (filePath == null) {
-        // iOS上可能需要使用bytes
-        if (pickedFile.bytes != null) {
-          // 使用bytes上传（临时方案）
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('iOS上请使用"文件"应用选择文件，或从相册选择'),
-                backgroundColor: Colors.orange,
-                duration: Duration(seconds: 4),
-              ),
-            );
-          }
-          return;
-        }
-        
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('无法获取文件路径，请重试'),
-              backgroundColor: Colors.orange,
-            ),
-          );
-        }
+      if (totalFiles == 0) {
         return;
       }
+
+      // 显示批量上传进度对话框
+      if (!mounted) return;
+      BuildContext? dialogContext;
+      int uploadedCount = 0;
+      int failedCount = 0;
+      List<String> failedFiles = [];
+      StateSetter? dialogSetState;
+      
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) {
+          dialogContext = context;
+          return StatefulBuilder(
+            builder: (context, setState) {
+              dialogSetState = setState;
+              return AlertDialog(
+                title: const Text('批量上传'),
+                content: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const CircularProgressIndicator(),
+                    const SizedBox(height: 16),
+                    Text('正在上传: ${uploadedCount + failedCount} / $totalFiles'),
+                    if (uploadedCount > 0)
+                      Text('成功: $uploadedCount', style: const TextStyle(color: Colors.green)),
+                    if (failedCount > 0)
+                      Text('失败: $failedCount', style: const TextStyle(color: Colors.red)),
+                  ],
+                ),
+              );
+            },
+          );
+        },
+      );
+
+      // 批量上传文件
+      for (int i = 0; i < files.length; i++) {
+        final pickedFile = files[i];
+        final filePath = pickedFile.path;
+        
+        if (filePath == null) {
+          // iOS上可能需要使用bytes
+          if (pickedFile.bytes != null) {
+            failedCount++;
+            failedFiles.add(pickedFile.name);
+            if (mounted && dialogSetState != null) {
+              try {
+                dialogSetState!(() {});
+              } catch (_) {}
+            }
+            continue;
+          }
+          
+          failedCount++;
+          failedFiles.add(pickedFile.name);
+          if (mounted && dialogSetState != null) {
+            try {
+              dialogSetState!(() {});
+            } catch (_) {}
+          }
+          continue;
+        }
       
       final file = File(filePath);
       
       // 检查文件是否存在
       if (!await file.exists()) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('文件不存在，请重新选择'),
-              backgroundColor: Colors.red,
-            ),
-          );
+        failedCount++;
+        failedFiles.add(pickedFile.name);
+        if (mounted && dialogSetState != null) {
+          try {
+            dialogSetState!(() {});
+          } catch (_) {}
         }
-        return;
+        continue;
       }
 
-        // 显示上传进度
-        if (!mounted) return;
-        showDialog(
-          context: context,
-          barrierDismissible: false,
-          builder: (context) => const Center(
-            child: CircularProgressIndicator(),
-          ),
-        );
+        try {
+          // 上传文件（添加超时控制）
+          final request = http.MultipartRequest(
+            'POST',
+            Uri.parse(AppConfig.uploadVideoUrl),
+          );
+          request.files.add(
+            await http.MultipartFile.fromPath(
+              'file',
+              file.path,
+            ),
+          );
+          request.fields['category'] = type == 'video' ? '原创视频' : '原创歌曲';
 
-        // 上传文件
-        final request = http.MultipartRequest(
-          'POST',
-          Uri.parse(AppConfig.uploadVideoUrl),
-        );
-        request.files.add(
-          await http.MultipartFile.fromPath(
-            'file',
-            file.path,
-          ),
-        );
-        request.fields['category'] = type == 'video' ? '原创视频' : '原创歌曲';
+          final streamedResponse = await request.send().timeout(
+            Duration(seconds: AppConfig.uploadTimeoutSeconds),
+            onTimeout: () {
+              throw TimeoutException('上传超时，请检查网络连接');
+            },
+          );
 
-        final streamedResponse = await request.send();
-        
-        if (mounted) {
-          Navigator.of(context).pop(); // 关闭进度对话框
+          if (streamedResponse.statusCode == 200) {
+            uploadedCount++;
+          } else {
+            failedCount++;
+            failedFiles.add(pickedFile.name);
+          }
+          
+          // 更新进度
+          if (mounted && dialogSetState != null) {
+            try {
+              dialogSetState!(() {});
+            } catch (_) {}
+          }
+        } catch (e) {
+          debugPrint('上传文件失败: ${pickedFile.name}, 错误: $e');
+          failedCount++;
+          failedFiles.add(pickedFile.name);
+          if (mounted && dialogSetState != null) {
+            try {
+              dialogSetState!(() {});
+            } catch (_) {}
+          }
         }
+      }
+      
+      // 关闭进度对话框
+      if (mounted && dialogContext != null) {
+        try {
+          Navigator.of(dialogContext!).pop();
+        } catch (_) {}
+      }
 
-        if (streamedResponse.statusCode == 200) {
+      // 显示上传结果
+      if (mounted) {
+        if (uploadedCount > 0) {
           // 重新加载内容
           await _loadContent();
-          if (mounted) {
+          
+          String message = '成功上传 $uploadedCount 个文件';
+          if (failedCount > 0) {
+            message += '，失败 $failedCount 个';
+          }
+          
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(message),
+              backgroundColor: failedCount > 0 ? Colors.orange : Colors.green,
+              duration: const Duration(seconds: 3),
+            ),
+          );
+          
+          if (failedCount > 0 && failedFiles.isNotEmpty) {
+            // 显示失败的文件列表
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('上传成功！'),
-                backgroundColor: Colors.green,
+              SnackBar(
+                content: Text('失败的文件: ${failedFiles.join(", ")}'),
+                backgroundColor: Colors.red,
+                duration: const Duration(seconds: 5),
               ),
             );
           }
         } else {
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('上传失败: ${streamedResponse.statusCode}'),
-                backgroundColor: Colors.red,
-              ),
-            );
-          }
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('所有文件上传失败'),
+              backgroundColor: Colors.red,
+            ),
+          );
         }
+      }
     } catch (e) {
       if (mounted) {
         // 尝试关闭进度对话框（如果存在）
@@ -280,10 +411,14 @@ class _SimpleHomePageState extends State<SimpleHomePage> {
         } catch (_) {}
         
         String errorMessage = '上传失败';
-        if (e.toString().contains('Permission denied') || e.toString().contains('权限')) {
+        if (e is TimeoutException || e.toString().contains('Timeout') || e.toString().contains('超时')) {
+          errorMessage = '上传超时，请检查网络连接或稍后重试';
+        } else if (e.toString().contains('Permission denied') || e.toString().contains('权限')) {
           errorMessage = '没有文件访问权限，请在设置中允许应用访问文件';
         } else if (e.toString().contains('No such file') || e.toString().contains('文件不存在')) {
           errorMessage = '文件不存在或已被删除，请重新选择';
+        } else if (e.toString().contains('Connection') || e.toString().contains('连接')) {
+          errorMessage = '无法连接到服务器，请检查网络连接';
         } else {
           errorMessage = '上传失败: ${e.toString()}';
         }
@@ -573,6 +708,7 @@ class _SimpleHomePageState extends State<SimpleHomePage> {
     );
   }
 
+
   @override
   Widget build(BuildContext context) {
     final videoCount = _items['video']?.length ?? 0;
@@ -757,6 +893,7 @@ class _SimpleHomePageState extends State<SimpleHomePage> {
                     if (AppConfig.enableAdminMode && AppConfig.isAdmin)
                       const SizedBox(height: 32),
 
+                    // 显示分类列表
                     // 视频列表
                     if (videoCount > 0) ...[
                       Row(
@@ -804,6 +941,7 @@ class _SimpleHomePageState extends State<SimpleHomePage> {
                         ],
                       ),
                       const SizedBox(height: 12),
+                      // 使用ListView.builder优化性能（懒加载）
                       ...(_showAllVideos 
                           ? _items['video']! 
                           : _items['video']!.take(5)).map((item) => _MediaItemCard(
@@ -862,6 +1000,7 @@ class _SimpleHomePageState extends State<SimpleHomePage> {
                         ],
                       ),
                       const SizedBox(height: 12),
+                      // 使用ListView.builder优化性能（懒加载）
                       ...(_showAllSongs 
                           ? _items['music']! 
                           : _items['music']!.take(5)).map((item) => _MediaItemCard(
@@ -1097,18 +1236,5 @@ class _MediaItemCard extends StatelessWidget {
   }
 }
 
-/// 简化的媒体项模型
-class SimpleMediaItem {
-  final String id;
-  final String title;
-  final String url;
-  final String type; // 'video' 或 'music'
-
-  const SimpleMediaItem({
-    required this.id,
-    required this.title,
-    required this.url,
-    required this.type,
-  });
-}
+// SimpleMediaItem已移至models.dart
 
