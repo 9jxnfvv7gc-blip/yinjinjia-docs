@@ -1,0 +1,53 @@
+========================================
+   这是你要打开的项目文件夹！
+========================================
+
+项目路径：
+/Volumes/Expansion/FlutterProjects/桌面影音播放器_安装包_20251121_165905
+
+项目名称：video_music_app
+显示名称：影音播放器 / 我的原创内容
+
+服务器地址：47.243.177.166:8081
+
+当前Git版本：fb56977 (2025-11-23)
+
+========================================
+如何打开：
+========================================
+
+方法1：在Cursor中
+File → Open Folder → 选择这个文件夹
+
+方法2：终端命令
+cd /Volumes/Expansion/FlutterProjects/桌面影音播放器_安装包_20251121_165905
+open -a Cursor .
+
+方法3：拖拽
+在Finder中找到这个文件夹，拖拽到Cursor图标
+
+========================================
+确认文件：
+========================================
+
+检查这些文件是否存在：
+- pubspec.yaml
+- lib/main.dart
+- lib/config.dart
+- ios/Runner.xcworkspace
+- android/app/build.gradle.kts
+
+如果都存在，说明打开正确！
+
+========================================
+不要打开：
+========================================
+
+❌ /Volumes/Expansion/flutter/AudiovisualExperience
+   （这是另一个Xcode项目，不是Flutter项目）
+
+❌ /Volumes/Expansion/FlutterProjects/music-video-app
+   （这是Capacitor项目，不是Flutter项目）
+
+========================================
+
