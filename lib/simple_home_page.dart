@@ -33,6 +33,7 @@ class _SimpleHomePageState extends State<SimpleHomePage> {
   bool _isLoading = false;
   bool _isConnected = false;
   String? _errorMessage;
+  String? _loadingStatus; // 加载状态信息（包括重试信息）
   bool _showAllVideos = false; // 是否显示所有视频
   bool _showAllSongs = false; // 是否显示所有歌曲
 
@@ -48,24 +49,41 @@ class _SimpleHomePageState extends State<SimpleHomePage> {
   Future<void> _loadContent() async {
     if (_isLoading) return;
 
+    debugPrint('开始加载内容...');
     setState(() {
       _isLoading = true;
       _errorMessage = null;
+      _loadingStatus = '正在连接服务器...';
     });
 
     try {
       // 加载视频
+      debugPrint('正在加载视频...');
+      setState(() {
+        _loadingStatus = '正在加载视频...';
+      });
       final videos = await _loadVideos();
+      debugPrint('视频加载完成，数量: ${videos.length}');
+      
       // 加载音乐
+      debugPrint('正在加载音乐...');
+      setState(() {
+        _loadingStatus = '正在加载音乐...';
+      });
       final musics = await _loadMusics();
+      debugPrint('音乐加载完成，数量: ${musics.length}');
 
       setState(() {
         _items['video'] = videos;
         _items['music'] = musics;
         _isConnected = true;
         _isLoading = false;
+        _loadingStatus = null;
       });
-    } catch (e) {
+      debugPrint('内容加载完成: 视频 ${videos.length} 个, 音乐 ${musics.length} 个');
+    } catch (e, stackTrace) {
+      debugPrint('加载内容失败: $e');
+      debugPrint('堆栈跟踪: $stackTrace');
       setState(() {
         _isConnected = false;
         _isLoading = false;
@@ -74,17 +92,64 @@ class _SimpleHomePageState extends State<SimpleHomePage> {
     }
   }
 
+  /// 带重试的HTTP请求
+  Future<http.Response> _getWithRetry(String url, {int maxRetries = 3, Duration? delay, String? type}) async {
+    delay ??= const Duration(seconds: 2);
+    for (int i = 0; i < maxRetries; i++) {
+      try {
+        final response = await http.get(
+          Uri.parse(url),
+          headers: {'Accept': 'application/json'},
+        ).timeout(Duration(seconds: AppConfig.requestTimeoutSeconds));
+        
+        if (response.statusCode == 200) {
+          // 成功时清除重试信息
+          if (mounted && _loadingStatus != null && _loadingStatus!.contains('重试')) {
+            setState(() {
+              _loadingStatus = type != null ? '正在加载$type...' : '正在加载...';
+            });
+          }
+          return response;
+        } else if (i < maxRetries - 1) {
+          final retryInfo = '请求失败，正在重试 (${i + 1}/$maxRetries)...';
+          debugPrint('请求失败，状态码: ${response.statusCode}，$retryInfo');
+          if (mounted) {
+            setState(() {
+              _loadingStatus = retryInfo;
+            });
+          }
+          await Future.delayed(delay);
+        }
+      } catch (e) {
+        if (i < maxRetries - 1) {
+          final retryInfo = '网络异常，正在重试 (${i + 1}/$maxRetries)...';
+          debugPrint('请求异常: $e，$retryInfo');
+          if (mounted) {
+            setState(() {
+              _loadingStatus = retryInfo;
+            });
+          }
+          await Future.delayed(delay);
+        } else {
+          rethrow;
+        }
+      }
+    }
+    throw Exception('请求失败，已重试 $maxRetries 次');
+  }
+
   /// 加载视频列表
   Future<List<SimpleMediaItem>> _loadVideos() async {
     try {
-      final response = await http.get(
-        Uri.parse('${AppConfig.apiBaseUrl}/api/list/原创视频'),
-        headers: {'Accept': 'application/json'},
-      ).timeout(Duration(seconds: AppConfig.requestTimeoutSeconds));
+      final url = '${AppConfig.apiBaseUrl}/api/list/原创视频';
+      debugPrint('请求视频列表: $url');
+      final response = await _getWithRetry(url, type: '视频');
 
+      debugPrint('视频列表响应状态: ${response.statusCode}');
       if (response.statusCode == 200) {
         final List<dynamic> data = json.decode(utf8.decode(response.bodyBytes));
-        return data.map((item) {
+        debugPrint('解析到 ${data.length} 个视频');
+        final videos = data.map((item) {
           final url = item['url'] as String;
           final fullUrl = url.startsWith('http') 
               ? url 
@@ -96,9 +161,14 @@ class _SimpleHomePageState extends State<SimpleHomePage> {
             type: 'video',
           );
         }).toList();
+        debugPrint('成功解析 ${videos.length} 个视频');
+        return videos;
+      } else {
+        debugPrint('视频列表请求失败，状态码: ${response.statusCode}');
       }
-    } catch (e) {
+    } catch (e, stackTrace) {
       debugPrint('加载视频失败: $e');
+      debugPrint('堆栈跟踪: $stackTrace');
     }
     return [];
   }
@@ -106,14 +176,15 @@ class _SimpleHomePageState extends State<SimpleHomePage> {
   /// 加载音乐列表
   Future<List<SimpleMediaItem>> _loadMusics() async {
     try {
-      final response = await http.get(
-        Uri.parse('${AppConfig.apiBaseUrl}/api/list/原创歌曲'),
-        headers: {'Accept': 'application/json'},
-      ).timeout(Duration(seconds: AppConfig.requestTimeoutSeconds));
+      final url = '${AppConfig.apiBaseUrl}/api/list/原创歌曲';
+      debugPrint('请求音乐列表: $url');
+      final response = await _getWithRetry(url, type: '音乐');
 
+      debugPrint('音乐列表响应状态: ${response.statusCode}');
       if (response.statusCode == 200) {
         final List<dynamic> data = json.decode(utf8.decode(response.bodyBytes));
-        return data.map((item) {
+        debugPrint('解析到 ${data.length} 首歌曲');
+        final musics = data.map((item) {
           final url = item['url'] as String;
           final fullUrl = url.startsWith('http') 
               ? url 
@@ -125,9 +196,14 @@ class _SimpleHomePageState extends State<SimpleHomePage> {
             type: 'music',
           );
         }).toList();
+        debugPrint('成功解析 ${musics.length} 首歌曲');
+        return musics;
+      } else {
+        debugPrint('音乐列表请求失败，状态码: ${response.statusCode}');
       }
-    } catch (e) {
+    } catch (e, stackTrace) {
       debugPrint('加载音乐失败: $e');
+      debugPrint('堆栈跟踪: $stackTrace');
     }
     return [];
   }
@@ -754,7 +830,25 @@ class _SimpleHomePageState extends State<SimpleHomePage> {
         ],
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
+          ? Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const CircularProgressIndicator(),
+                  if (_loadingStatus != null) ...[
+                    const SizedBox(height: 16),
+                    Text(
+                      _loadingStatus!,
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey[600],
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                ],
+              ),
+            )
           : RefreshIndicator(
               onRefresh: _loadContent,
               child: SingleChildScrollView(
