@@ -17,7 +17,7 @@ from urllib.parse import unquote, parse_qs
 import tempfile
 
 PORT = 8081
-VIDEO_ROOT = "/Volumes/Expansion"  # 改成你的视频根目录路径
+VIDEO_ROOT = os.environ.get("VIDEO_ROOT", "/root/videos")  # 默认 /root/videos，亦可用环境变量覆盖
 
 class VideoHandler(http.server.SimpleHTTPRequestHandler):
     def end_headers(self):

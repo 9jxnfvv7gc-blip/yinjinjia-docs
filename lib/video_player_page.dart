@@ -30,9 +30,10 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> {
     
     // 判断是 URL 还是本地路径
     if (path.startsWith('http://') || path.startsWith('https://')) {
-      // 网络 URL
-      debugPrint('使用网络URL播放: $path');
-      _controller = VideoPlayerController.networkUrl(Uri.parse(path));
+      // 网络 URL - 先对路径中可能的中文或特殊字符做编码
+      final encodedUrl = _encodeUrl(path);
+      debugPrint('使用网络URL播放: $encodedUrl');
+      _controller = VideoPlayerController.networkUrl(Uri.parse(encodedUrl));
     } else {
       // 本地文件路径
       debugPrint('使用本地文件播放: $path');
@@ -56,7 +57,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> {
       // 如果是网络URL，测试是否可以访问
       if (path.startsWith('http://') || path.startsWith('https://')) {
         debugPrint('尝试测试URL可访问性...');
-        _testUrlAccess(path);
+        _testUrlAccess(_encodeUrl(path));
       }
       
       if (mounted) {
@@ -103,6 +104,47 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> {
       }
     } catch (e) {
       debugPrint('URL测试失败: $e');
+    }
+  }
+
+  /// 对 URL 中的中文、空格、括号等特殊字符进行编码，避免服务端 404。
+  /// 需要手动组装，防止 Uri.replace 再次对 `%` 进行编码。
+  String _encodeUrl(String url) {
+    try {
+      final uri = Uri.parse(url);
+      if (!uri.hasAuthority) {
+        return Uri.encodeFull(url);
+      }
+      final encodedPath = uri.pathSegments
+          .map((segment) => Uri.encodeComponent(segment))
+          .join('/');
+
+      final buffer = StringBuffer()
+        ..write(uri.scheme)
+        ..write('://')
+        ..write(uri.authority);
+
+      if (encodedPath.isNotEmpty) {
+        buffer
+          ..write('/')
+          ..write(encodedPath);
+      }
+
+      if (uri.hasQuery) {
+        buffer
+          ..write('?')
+          ..write(uri.query);
+      }
+
+      if (uri.hasFragment) {
+        buffer
+          ..write('#')
+          ..write(uri.fragment);
+      }
+
+      return buffer.toString();
+    } catch (_) {
+      return Uri.encodeFull(url);
     }
   }
 
