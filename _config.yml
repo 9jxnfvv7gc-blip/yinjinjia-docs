@@ -1,0 +1,16 @@
+# GitHub Pages 配置文件
+# 确保正确显示中文内容
+
+plugins:
+  - jekyll-optional-front-matter
+
+# 设置默认编码
+encoding: utf-8
+
+# 设置语言
+lang: zh-CN
+
+# 排除文件（Jekyll 不需要处理的文件）
+exclude:
+  - README.md
+
