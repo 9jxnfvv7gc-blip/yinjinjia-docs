@@ -1,0 +1,4 @@
+   maven { url 'https://mirrors.cloud.tencent.com/nexus/repository/maven-public/' }
+   maven { url 'https://mirrors.cloud.tencent.com/download.flutter.io' }
+
+

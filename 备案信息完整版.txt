@@ -1,0 +1,90 @@
+========================================
+📋 影音家 APP 备案信息（完整版）
+========================================
+
+【Android 平台】
+
+1. 软件包名称（Package Name）
+   ✅ com.example.video_music_app
+
+2. 公钥和证书 MD5 指纹
+   
+   ⚠️ 注意：当前使用的是调试签名，备案时需要使用正式签名
+   
+   调试签名信息（仅用于测试）：
+   - 密钥库：~/.android/debug.keystore
+   - 别名：androiddebugkey
+   - SHA1: 1C:F2:A2:D2:EB:03:D8:97:72:E3:43:64:1A:48:E5:5B:7C:1E:FD:EE
+   - SHA256: 95:46:75:28:F0:2A:1C:67:B6:B9:F4:6C:C0:26:5E:ED:D5:CD:CA:20:3E:05:B2:EA:51:7D:5F:0D:FA:0B:C9:1C
+   
+   📝 备案建议：
+   方法1（推荐）：直接提供 APK 包
+   - 构建命令：flutter build apk --release
+   - APK 路径：build/app/outputs/flutter-apk/app-release.apk
+   - 直接上传 APK 文件即可（备案系统会自动提取证书信息）
+   
+   方法2：从 APK 中提取证书 MD5
+   - 命令：keytool -printcert -jarfile build/app/outputs/flutter-apk/app-release.apk | grep -i MD5
+
+========================================
+
+【iOS 平台】
+
+1. Bundle ID
+   ✅ com.xiaohui.videoMusicApp
+
+2. 证书 SHA-1 指纹
+   ✅ A1204EB2C3235DFB06AA4ECE2A2E81D87F574860
+   - 证书名称：Apple Development: lmminakols@hotmail.com (6389AQ42YH)
+   - 证书类型：开发证书
+   
+   ⚠️ 注意：备案时可能需要使用发布证书（Distribution Certificate）
+   如果需要发布证书，请在 Xcode 中查看：
+   - Xcode → Preferences → Accounts
+   - 选择您的 Apple ID
+   - 点击 "Manage Certificates"
+   - 查看 "Apple Distribution" 证书
+
+3. 公钥
+   ⚠️ 需要从证书中提取
+   
+   提取命令：
+   security find-certificate -c "Apple Development: lmminakols@hotmail.com" -p | openssl x509 -pubkey -noout
+   
+   或者提供 .p12 证书文件
+
+========================================
+
+📝 备案操作步骤：
+
+【Android】
+1. 构建 release APK：
+   flutter build apk --release
+
+2. 上传 APK 文件：
+   build/app/outputs/flutter-apk/app-release.apk
+
+3. 填写软件包名称：
+   com.example.video_music_app
+
+【iOS】
+1. Bundle ID：
+   com.xiaohui.videoMusicApp
+
+2. 证书 SHA-1 指纹：
+   A1204EB2C3235DFB06AA4ECE2A2E81D87F574860
+   （如果要求发布证书，请在 Xcode 中查看 Distribution 证书）
+
+3. 公钥：
+   从证书中提取，或提供 .p12 证书文件
+
+========================================
+
+💡 重要提示：
+
+1. Android 调试签名仅用于开发测试，备案时建议使用正式签名
+2. iOS 开发证书可以用于备案，但某些情况下可能需要发布证书
+3. 如果备案系统要求提供 APK 包，直接上传 APK 最简单
+4. 公钥可以从证书中提取，或直接提供证书文件
+
+========================================

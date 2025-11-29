@@ -11,6 +11,7 @@ import 'config.dart';
 import 'video_player_page.dart';
 import 'music_player_page.dart';
 import 'models.dart';
+import 'services/auth_service.dart';
 
 /// 简化的主页 - 视频和音乐统一在一个页面
 class SimpleHomePage extends StatefulWidget {
@@ -36,21 +37,78 @@ class _SimpleHomePageState extends State<SimpleHomePage> {
   String? _loadingStatus; // 加载状态信息（包括重试信息）
   bool _showAllVideos = false; // 是否显示所有视频
   bool _showAllSongs = false; // 是否显示所有歌曲
+  bool _isAdmin = false; // 是否已授权（管理员）
 
   @override
   void initState() {
     super.initState();
-    if (!kIsWeb && AppConfig.autoConnectServer) {
-      _loadContent();
+    // 检查授权状态
+    _checkAdminStatus();
+    
+    // 使用 Future.delayed 延迟执行，确保组件完全初始化
+    // 增加延迟时间，确保应用完全启动
+    Future.delayed(const Duration(milliseconds: 500), () {
+      if (mounted && !kIsWeb) {
+        try {
+          if (AppConfig.autoConnectServer) {
+            _loadContent();
+          }
+        } catch (e) {
+          debugPrint('初始化错误（已捕获）: $e');
+          if (mounted) {
+            _safeSetState(() {
+              _errorMessage = '初始化失败: ${e.toString().length > 50 ? e.toString().substring(0, 50) + "..." : e}';
+            });
+          }
+        }
+      }
+    });
+  }
+
+  /// 检查管理员状态
+  Future<void> _checkAdminStatus() async {
+    try {
+      final isAdmin = await AppConfig.isAdmin();
+      if (mounted) {
+        _safeSetState(() {
+          _isAdmin = isAdmin;
+        });
+      }
+    } catch (e) {
+      debugPrint('检查管理员状态失败: $e');
+      // 默认设置为 false（安全默认值）
+      if (mounted) {
+        _safeSetState(() {
+          _isAdmin = false;
+        });
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    // 清理资源，防止内存泄漏
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  /// 安全的 setState 包装，检查组件是否还存在
+  void _safeSetState(VoidCallback fn) {
+    if (mounted) {
+      try {
+        setState(fn);
+      } catch (e) {
+        debugPrint('setState 错误（已忽略）: $e');
+      }
     }
   }
 
   /// 加载所有内容（视频和音乐）
   Future<void> _loadContent() async {
-    if (_isLoading) return;
+    if (_isLoading || !mounted) return;
 
     debugPrint('开始加载内容...');
-    setState(() {
+    _safeSetState(() {
       _isLoading = true;
       _errorMessage = null;
       _loadingStatus = '正在连接服务器...';
@@ -58,22 +116,25 @@ class _SimpleHomePageState extends State<SimpleHomePage> {
 
     try {
       // 加载视频
+      if (!mounted) return;
       debugPrint('正在加载视频...');
-      setState(() {
+      _safeSetState(() {
         _loadingStatus = '正在加载视频...';
       });
       final videos = await _loadVideos();
       debugPrint('视频加载完成，数量: ${videos.length}');
       
       // 加载音乐
+      if (!mounted) return;
       debugPrint('正在加载音乐...');
-      setState(() {
+      _safeSetState(() {
         _loadingStatus = '正在加载音乐...';
       });
       final musics = await _loadMusics();
       debugPrint('音乐加载完成，数量: ${musics.length}');
 
-      setState(() {
+      if (!mounted) return;
+      _safeSetState(() {
         _items['video'] = videos;
         _items['music'] = musics;
         _isConnected = true;
@@ -84,11 +145,13 @@ class _SimpleHomePageState extends State<SimpleHomePage> {
     } catch (e, stackTrace) {
       debugPrint('加载内容失败: $e');
       debugPrint('堆栈跟踪: $stackTrace');
-      setState(() {
-        _isConnected = false;
-        _isLoading = false;
-        _errorMessage = '加载失败: $e';
-      });
+      if (mounted) {
+        _safeSetState(() {
+          _isConnected = false;
+          _isLoading = false;
+          _errorMessage = '加载失败: ${e.toString().length > 50 ? e.toString().substring(0, 50) + "..." : e}';
+        });
+      }
     }
   }
 
@@ -105,7 +168,7 @@ class _SimpleHomePageState extends State<SimpleHomePage> {
         if (response.statusCode == 200) {
           // 成功时清除重试信息
           if (mounted && _loadingStatus != null && _loadingStatus!.contains('重试')) {
-            setState(() {
+            _safeSetState(() {
               _loadingStatus = type != null ? '正在加载$type...' : '正在加载...';
             });
           }
@@ -114,7 +177,7 @@ class _SimpleHomePageState extends State<SimpleHomePage> {
           final retryInfo = '请求失败，正在重试 (${i + 1}/$maxRetries)...';
           debugPrint('请求失败，状态码: ${response.statusCode}，$retryInfo');
           if (mounted) {
-            setState(() {
+            _safeSetState(() {
               _loadingStatus = retryInfo;
             });
           }
@@ -125,7 +188,7 @@ class _SimpleHomePageState extends State<SimpleHomePage> {
           final retryInfo = '网络异常，正在重试 (${i + 1}/$maxRetries)...';
           debugPrint('请求异常: $e，$retryInfo');
           if (mounted) {
-            setState(() {
+            _safeSetState(() {
               _loadingStatus = retryInfo;
             });
           }
@@ -151,9 +214,22 @@ class _SimpleHomePageState extends State<SimpleHomePage> {
         debugPrint('解析到 ${data.length} 个视频');
         final videos = data.map((item) {
           final url = item['url'] as String;
-          final fullUrl = url.startsWith('http') 
-              ? url 
-              : '${AppConfig.apiBaseUrl}$url';
+          debugPrint('原始URL: $url');
+          
+          // 构建完整URL
+          String fullUrl;
+          if (url.startsWith('http://') || url.startsWith('https://')) {
+            // 已经是完整URL，直接使用
+            fullUrl = url;
+          } else {
+            // 相对路径，需要拼接
+            // 确保URL以/开头
+            final normalizedUrl = url.startsWith('/') ? url : '/$url';
+            fullUrl = '${AppConfig.apiBaseUrl}$normalizedUrl';
+          }
+          
+          debugPrint('构建后的完整URL: $fullUrl');
+          
           return SimpleMediaItem(
             id: item['id'] ?? fullUrl,
             title: item['title'] as String? ?? '未命名视频',
@@ -186,9 +262,22 @@ class _SimpleHomePageState extends State<SimpleHomePage> {
         debugPrint('解析到 ${data.length} 首歌曲');
         final musics = data.map((item) {
           final url = item['url'] as String;
-          final fullUrl = url.startsWith('http') 
-              ? url 
-              : '${AppConfig.apiBaseUrl}$url';
+          debugPrint('原始音乐URL: $url');
+          
+          // 构建完整URL
+          String fullUrl;
+          if (url.startsWith('http://') || url.startsWith('https://')) {
+            // 已经是完整URL，直接使用
+            fullUrl = url;
+          } else {
+            // 相对路径，需要拼接
+            // 确保URL以/开头
+            final normalizedUrl = url.startsWith('/') ? url : '/$url';
+            fullUrl = '${AppConfig.apiBaseUrl}$normalizedUrl';
+          }
+          
+          debugPrint('构建后的完整音乐URL: $fullUrl');
+          
           return SimpleMediaItem(
             id: item['id'] ?? fullUrl,
             title: item['title'] as String? ?? '未命名音乐',
@@ -619,8 +708,27 @@ class _SimpleHomePageState extends State<SimpleHomePage> {
       // 从URL中提取文件路径
       String filePath = item.url;
       if (filePath.startsWith('http')) {
-        final uri = Uri.parse(filePath);
-        filePath = uri.path;
+        // 注意：Uri.parse()会将#视为fragment，导致路径被截断
+        // 所以我们需要手动提取路径部分，保留#字符
+        try {
+          // 先尝试找到路径的起始位置（第一个/之后）
+          int pathStart = filePath.indexOf('/', filePath.indexOf('://') + 3);
+          if (pathStart > 0) {
+            // 提取从路径开始到URL结束的所有内容（包括#）
+            // 但需要排除查询参数（?之后的内容）
+            int queryStart = filePath.indexOf('?', pathStart);
+            int endPos = queryStart > 0 ? queryStart : filePath.length;
+            filePath = filePath.substring(pathStart, endPos);
+          } else {
+            // 如果找不到路径，使用Uri.parse()作为后备
+            final uri = Uri.parse(filePath);
+            filePath = uri.path;
+          }
+        } catch (e) {
+          // 如果解析失败，使用Uri.parse()作为后备
+          final uri = Uri.parse(filePath);
+          filePath = uri.path;
+        }
       }
 
       // 调用删除API
@@ -765,7 +873,7 @@ class _SimpleHomePageState extends State<SimpleHomePage> {
               },
             ),
             // 删除（仅管理员）
-            if (AppConfig.enableAdminMode && AppConfig.isAdmin) ...[
+            if (AppConfig.enableAdminMode && _isAdmin) ...[
               const Divider(),
               ListTile(
                 leading: const Icon(Icons.delete, color: Colors.red),
@@ -811,7 +919,7 @@ class _SimpleHomePageState extends State<SimpleHomePage> {
             Icon(Icons.play_circle_filled, color: Colors.white, size: 28),
             SizedBox(width: 8),
             Text(
-              '我的原创内容',
+              '小船',
               style: TextStyle(
                 fontWeight: FontWeight.bold,
                 color: Colors.white,
@@ -894,7 +1002,7 @@ class _SimpleHomePageState extends State<SimpleHomePage> {
                             onTap: () {
                               // 切换显示所有视频（像文件夹一样）
                               if (_items['video']!.isNotEmpty) {
-                                setState(() {
+                                _safeSetState(() {
                                   _showAllVideos = !_showAllVideos;
                                 });
                                 // 滚动到视频列表
@@ -930,7 +1038,7 @@ class _SimpleHomePageState extends State<SimpleHomePage> {
                             onTap: () {
                               // 切换显示所有歌曲（像文件夹一样）
                               if (_items['music']!.isNotEmpty) {
-                                setState(() {
+                                _safeSetState(() {
                                   _showAllSongs = !_showAllSongs;
                                 });
                                 // 滚动到歌曲列表
@@ -962,7 +1070,7 @@ class _SimpleHomePageState extends State<SimpleHomePage> {
                     const SizedBox(height: 24),
 
                     // 上传按钮（仅管理员可见）
-                    if (AppConfig.enableAdminMode && AppConfig.isAdmin)
+                    if (AppConfig.enableAdminMode && _isAdmin)
                       SizedBox(
                         width: double.infinity,
                         child: ElevatedButton.icon(
@@ -984,7 +1092,7 @@ class _SimpleHomePageState extends State<SimpleHomePage> {
                         ),
                       ),
 
-                    if (AppConfig.enableAdminMode && AppConfig.isAdmin)
+                    if (AppConfig.enableAdminMode && _isAdmin)
                       const SizedBox(height: 32),
 
                     // 显示分类列表
@@ -1009,7 +1117,7 @@ class _SimpleHomePageState extends State<SimpleHomePage> {
                           if (!_showAllVideos && videoCount > 5)
                             TextButton.icon(
                               onPressed: () {
-                                setState(() {
+                                _safeSetState(() {
                                   _showAllVideos = true;
                                 });
                               },
@@ -1022,7 +1130,7 @@ class _SimpleHomePageState extends State<SimpleHomePage> {
                           if (_showAllVideos)
                             TextButton.icon(
                               onPressed: () {
-                                setState(() {
+                                _safeSetState(() {
                                   _showAllVideos = false;
                                 });
                               },
@@ -1068,7 +1176,7 @@ class _SimpleHomePageState extends State<SimpleHomePage> {
                           if (!_showAllSongs && musicCount > 5)
                             TextButton.icon(
                               onPressed: () {
-                                setState(() {
+                                _safeSetState(() {
                                   _showAllSongs = true;
                                 });
                               },
@@ -1081,7 +1189,7 @@ class _SimpleHomePageState extends State<SimpleHomePage> {
                           if (_showAllSongs)
                             TextButton.icon(
                               onPressed: () {
-                                setState(() {
+                                _safeSetState(() {
                                   _showAllSongs = false;
                                 });
                               },

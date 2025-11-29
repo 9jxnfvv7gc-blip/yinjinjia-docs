@@ -1,3 +1,5 @@
+import 'services/auth_service.dart';
+
 /// 应用配置文件
 /// 
 /// 这个文件包含所有云端服务的配置
@@ -6,8 +8,11 @@
 class AppConfig {
   // ========== 云端API服务器配置 ==========
   
-  /// 生产环境API服务器地址（服务器部署）
+  /// 生产环境API服务器地址（香港服务器）
   static const String productionApiUrl = 'http://47.243.177.166:8081';
+  
+  /// 北京服务器地址（视频文件在此服务器）
+  static const String beijingApiUrl = 'http://39.107.137.136:8081';
   
   /// 开发环境API服务器地址（本地开发）
   static const String developmentApiUrl = 'http://localhost:8081';
@@ -15,14 +20,16 @@ class AppConfig {
   /// 当前使用的API服务器地址
   /// 根据构建类型自动选择（开发/生产）
   static String get apiBaseUrl {
-    // 发布版本使用服务器地址，调试版本使用本地地址
-    const bool isProduction = bool.fromEnvironment('PRODUCTION', defaultValue: false);
-    // 或者根据kDebugMode判断
-    if (isProduction) {
-      return productionApiUrl;
-    }
-    // 默认使用服务器地址（让所有用户都能看到内容）
-    return productionApiUrl;
+    // 使用香港服务器（用于上架到香港应用商店）
+    // 注意：需要确保香港服务器的 video_server.py 正在运行
+    return productionApiUrl;  // http://47.243.177.166:8081
+    
+    // 使用北京服务器（用于国内备案）
+    // return beijingApiUrl;  // http://39.107.137.136:8081
+    
+    // 临时使用本地服务器（用于快速测试）
+    // 确保 Mac 和 iOS 设备在同一 WiFi，Mac IP: 192.168.10.103
+    // return 'http://192.168.10.103:8081';
   }
   
   // ========== 阿里云OSS配置 ==========
@@ -87,13 +94,19 @@ class AppConfig {
   /// TODO: 后续应该从服务器获取用户角色，或通过登录验证
   static const bool enableAdminMode = true;
   
-  /// 当前用户是否为管理员
-  /// TODO: 应该从登录状态或服务器获取
-  /// 暂时可以通过配置或SharedPreferences设置
-  static bool get isAdmin {
-    // TODO: 从SharedPreferences或服务器获取用户角色
-    // 暂时返回true（开发阶段），生产环境应该从登录状态获取
-    return true; // 改为false可以隐藏上传按钮
+  /// 当前用户是否为管理员（授权用户）
+  /// 从 SharedPreferences 获取授权状态
+  /// 注意：这是一个异步方法，需要 await
+  static Future<bool> isAdmin() async {
+    // 使用 AuthService 检查授权状态
+    return await AuthService.isAuthorized();
+  }
+  
+  /// 同步方法：检查缓存中的授权状态（可能不准确）
+  /// 注意：这个方法可能返回过期的状态，应该优先使用 isAdmin()
+  static bool get isAdminSync {
+    // 返回 false 作为安全默认值，强制使用异步方法
+    return false;
   }
 }
 

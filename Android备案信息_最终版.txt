@@ -1,0 +1,50 @@
+========================================
+📋 Android 备案信息（最终版）
+========================================
+
+【1. 软件包名称（Package Name）】
+
+com.example.video_music_app
+
+========================================
+
+【2. 证书 MD5 指纹】
+
+⚠️ 注意：当前使用的是调试签名
+
+💡 备案建议（推荐）：
+根据备案人员的要求："可直接提供 apk 包"
+- 直接上传 APK 文件即可
+- 备案系统会自动从 APK 中提取证书 MD5 指纹
+- APK 文件：桌面/app-release.apk
+
+如果必须手动填写 MD5 指纹：
+（需要从 APK 中提取，或使用正式签名）
+
+========================================
+
+【3. 公钥】
+
+-----BEGIN PUBLIC KEY-----
+MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAyPM8W7u2BkJxNhjuk2Pt
+qRi67ERK77iyUEROAwZKbv7nEKjIjSdGB8YIja7iM6rtV26mH/fmTPnFAYQwYgou
+nq1GQ6nvcfvxqCl4bpUr4F2T35V+AQ4i8FhlBRCYpWlB4pT3ByNFC9dq0MK8sOMv
+2wlLKCIZT08GgrNTXVVtDq+PjvBTNiPDaLQN5IuQYeGMzuXtExcPzwdKayRKVqFM
+RlXbAJ/I2SZf36QXOr7KbcZZUY8EfBPbcIvSYbWUamc20d+0eGE02FGPtS3Mg7R/
+9HPfMvB7uClzbghWKxqciC9Ff1JKchW/0ZOA151sMGR+7cE5mgEC47hjqiS6lbUA
+lQIDAQAB
+-----END PUBLIC KEY-----
+
+========================================
+
+📝 填写说明：
+
+1. 软件包名称：com.example.video_music_app
+
+2. 证书 MD5 指纹：
+   - 推荐：直接上传 APK 包（桌面/app-release.apk）
+   - 备案系统会自动提取
+
+3. 公钥：见上方（完整公钥）
+
+========================================

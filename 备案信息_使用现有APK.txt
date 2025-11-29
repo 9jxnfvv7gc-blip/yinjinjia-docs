@@ -1,0 +1,48 @@
+========================================
+📋 影音家 APP 备案信息（使用现有 APK）
+========================================
+
+【Android 平台】
+
+1. 软件包名称（Package Name）
+   ✅ com.example.video_music_app
+
+2. APK 文件
+   ✅ release/app-release-20251124.apk
+   - 文件路径：/Volumes/Expansion/FlutterProjects/桌面影音播放器_安装包_20251121_165905/release/app-release-20251124.apk
+   - 可以直接上传此 APK 文件用于备案
+
+3. 证书 MD5 指纹
+   ⚠️ 需要从 APK 中提取
+   
+   提取命令：
+   keytool -printcert -jarfile release/app-release-20251124.apk | grep -i MD5
+   
+   或者直接上传 APK，备案系统会自动提取
+
+========================================
+
+【iOS 平台】
+
+1. Bundle ID
+   ✅ com.xiaohui.videoMusicApp
+
+2. 证书 SHA-1 指纹
+   ✅ A1204EB2C3235DFB06AA4ECE2A2E81D87F574860
+   - 证书名称：Apple Development: lmminakols@hotmail.com (6389AQ42YH)
+
+3. 公钥
+   ⚠️ 需要从证书中提取
+   - 命令：security find-certificate -c "Apple Development: lmminakols@hotmail.com" -p | openssl x509 -pubkey -noout
+
+========================================
+
+💡 备案操作建议：
+
+1. Android：直接上传 APK 文件（最简单）
+   - 文件：release/app-release-20251124.apk
+   - 备案系统会自动提取证书信息
+
+2. iOS：使用提供的 Bundle ID 和证书 SHA-1
+
+========================================

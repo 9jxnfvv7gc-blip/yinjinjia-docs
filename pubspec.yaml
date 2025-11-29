@@ -41,8 +41,10 @@ dependencies:
   http: ^1.2.0
   crypto: ^3.0.3
   xml: ^6.3.0
-  shared_preferences: ^2.2.2
+  # 仍然需要 shared_preferences 的 Dart 代码，但已在 iOS 侧禁用插件注册，避免冷启动崩溃
+  shared_preferences: ^2.5.3
   share_plus: ^10.1.2
+  url_launcher: ^6.2.5
 
 dev_dependencies:
   flutter_test:

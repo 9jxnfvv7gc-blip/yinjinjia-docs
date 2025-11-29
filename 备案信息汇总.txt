@@ -1,0 +1,59 @@
+========================================
+📋 影音家 APP 备案信息汇总
+========================================
+
+【Android 平台】
+
+1. 软件包名称（Package Name）
+   com.example.video_music_app
+
+2. 公钥和证书 MD5 指纹
+   ⚠️ 需要构建 release APK 后获取
+   
+   方法1（推荐）：直接提供 APK 包
+   - 构建命令：flutter build apk --release
+   - APK 路径：build/app/outputs/flutter-apk/app-release.apk
+   - 直接上传 APK 文件即可
+   
+   方法2：从调试签名获取（仅用于测试）
+   - 密钥库：~/.android/debug.keystore
+   - 别名：androiddebugkey
+   - 密码：android
+   - 获取命令：keytool -list -v -keystore ~/.android/debug.keystore -alias androiddebugkey -storepass android -keypass android | grep -i MD5
+
+========================================
+
+【iOS 平台】
+
+1. Bundle ID
+   com.xiaohui.videoMusicApp
+
+2. 证书 SHA-1 指纹
+   ⚠️ 需要在 Xcode 或命令行中查看
+   
+   方法1：在 Xcode 中查看
+   - Xcode → Preferences → Accounts
+   - 选择您的 Apple ID
+   - 点击 "Manage Certificates"
+   - 查看证书信息
+   
+   方法2：使用命令行
+   - 命令：security find-identity -v -p codesigning
+   - 查看所有代码签名证书
+
+3. 公钥
+   ⚠️ 需要从证书中提取
+   - 命令：security find-certificate -c "Apple Development: Your Name" -p | openssl x509 -pubkey -noout
+
+========================================
+
+💡 快速操作建议：
+
+1. Android：直接提供 APK 包（最简单）
+   flutter build apk --release
+   然后上传 build/app/outputs/flutter-apk/app-release.apk
+
+2. iOS：在 Xcode 中查看证书信息最方便
+   Xcode → Preferences → Accounts → Manage Certificates
+
+========================================

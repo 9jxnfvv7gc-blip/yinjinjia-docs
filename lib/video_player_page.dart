@@ -2,8 +2,10 @@ import 'dart:io';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:video_player/video_player.dart';
 import 'package:http/http.dart' as http;
+import 'package:share_plus/share_plus.dart';
 
 import 'models.dart';
 
@@ -33,7 +35,19 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> {
       // 网络 URL - 先对路径中可能的中文或特殊字符做编码
       final encodedUrl = _encodeUrl(path);
       debugPrint('使用网络URL播放: $encodedUrl');
-      _controller = VideoPlayerController.networkUrl(Uri.parse(encodedUrl));
+      
+      // 创建VideoPlayerController，添加HTTP头以支持Range请求
+      // ExoPlayer需要完整的HTTP头配置，特别是User-Agent
+      _controller = VideoPlayerController.networkUrl(
+        Uri.parse(encodedUrl),
+        httpHeaders: {
+          'Accept': '*/*',
+          'Accept-Ranges': 'bytes',
+          'Connection': 'keep-alive',
+          'User-Agent': 'Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.120 Mobile Safari/537.36',
+          'Cache-Control': 'no-cache',
+        },
+      );
     } else {
       // 本地文件路径
       debugPrint('使用本地文件播放: $path');
@@ -41,7 +55,11 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> {
     }
     
     _controller.initialize().then((_) {
-      debugPrint('视频初始化成功');
+      debugPrint('✅ 视频初始化成功');
+      debugPrint('视频信息:');
+      debugPrint('  - 时长: ${_controller.value.duration}');
+      debugPrint('  - 尺寸: ${_controller.value.size}');
+      debugPrint('  - 宽高比: ${_controller.value.aspectRatio}');
       if (mounted) {
         setState(() {
           _isInitialized = true;
@@ -49,15 +67,22 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> {
         _controller.play();
         debugPrint('开始播放视频');
       }
-    }).catchError((error) {
-      debugPrint('视频初始化失败: $error');
+    }).catchError((error, stackTrace) {
+      debugPrint('❌ 视频初始化失败');
+      debugPrint('错误详情: $error');
       debugPrint('错误类型: ${error.runtimeType}');
-      debugPrint('视频路径: $path');
+      debugPrint('原始路径: $path');
+      debugPrint('错误堆栈: $stackTrace');
       
       // 如果是网络URL，测试是否可以访问
       if (path.startsWith('http://') || path.startsWith('https://')) {
+        final encodedUrl = _encodeUrl(path);
+        debugPrint('编码后的URL: $encodedUrl');
         debugPrint('尝试测试URL可访问性...');
-        _testUrlAccess(_encodeUrl(path));
+        _testUrlAccess(encodedUrl);
+        
+        // 额外测试：尝试下载视频前1KB
+        _testVideoDownload(encodedUrl);
       }
       
       if (mounted) {
@@ -89,21 +114,89 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> {
   /// 测试URL是否可以访问
   Future<void> _testUrlAccess(String url) async {
     try {
-      debugPrint('测试URL访问: $url');
+      debugPrint('🔍 测试URL访问: $url');
       final uri = Uri.parse(url);
+      debugPrint('解析后的URI:');
+      debugPrint('  - Scheme: ${uri.scheme}');
+      debugPrint('  - Host: ${uri.host}');
+      debugPrint('  - Port: ${uri.port}');
+      debugPrint('  - Path: ${uri.path}');
+      debugPrint('  - Query: ${uri.query}');
+      
       final response = await http.head(uri).timeout(
         const Duration(seconds: 10),
         onTimeout: () {
           throw TimeoutException('URL访问超时');
         },
       );
-      debugPrint('URL测试结果: ${response.statusCode}');
-      debugPrint('Content-Type: ${response.headers['content-type']}');
-      if (response.statusCode != 200) {
-        debugPrint('URL返回错误状态码: ${response.statusCode}');
+      
+      debugPrint('📊 URL测试结果:');
+      debugPrint('  - 状态码: ${response.statusCode}');
+      debugPrint('  - Content-Type: ${response.headers['content-type']}');
+      debugPrint('  - Content-Length: ${response.headers['content-length']}');
+      debugPrint('  - Accept-Ranges: ${response.headers['accept-ranges']}');
+      
+      if (response.statusCode == 200) {
+        debugPrint('✅ URL可访问');
+      } else if (response.statusCode == 404) {
+        debugPrint('❌ 文件未找到 (404)');
+        debugPrint('   请检查服务器上的文件路径是否正确');
+      } else if (response.statusCode == 403) {
+        debugPrint('❌ 访问被拒绝 (403)');
+        debugPrint('   请检查服务器权限配置');
+      } else {
+        debugPrint('⚠️ URL返回错误状态码: ${response.statusCode}');
       }
     } catch (e) {
-      debugPrint('URL测试失败: $e');
+      debugPrint('❌ URL测试失败: $e');
+      debugPrint('错误类型: ${e.runtimeType}');
+      if (e is TimeoutException) {
+        debugPrint('   网络连接超时，请检查网络连接');
+      } else if (e.toString().contains('SocketException')) {
+        debugPrint('   无法连接到服务器，请检查服务器地址和网络');
+      }
+    }
+  }
+
+  /// 测试视频文件是否可以下载
+  Future<void> _testVideoDownload(String url) async {
+    try {
+      debugPrint('🔍 测试视频文件下载...');
+      final uri = Uri.parse(url);
+      final response = await http.get(
+        uri,
+        headers: {'Range': 'bytes=0-1023'}, // 只下载前1KB
+      ).timeout(
+        const Duration(seconds: 10),
+        onTimeout: () {
+          throw TimeoutException('下载超时');
+        },
+      );
+      
+      debugPrint('📊 视频下载测试结果:');
+      debugPrint('  - 状态码: ${response.statusCode}');
+      debugPrint('  - Content-Type: ${response.headers['content-type']}');
+      debugPrint('  - Content-Length: ${response.headers['content-length']}');
+      debugPrint('  - Content-Range: ${response.headers['content-range']}');
+      debugPrint('  - 下载数据大小: ${response.bodyBytes.length} 字节');
+      
+      if (response.statusCode == 200 || response.statusCode == 206) {
+        debugPrint('✅ 视频文件可以下载');
+        // 检查是否是有效的MP4文件（MP4文件通常以ftyp box开头）
+        if (response.bodyBytes.length > 4) {
+          final header = String.fromCharCodes(response.bodyBytes.take(4));
+          debugPrint('  - 文件头: ${response.bodyBytes.take(8).map((b) => b.toRadixString(16).padLeft(2, '0')).join(' ')}');
+          if (response.bodyBytes.length >= 8) {
+            // MP4文件应该包含ftyp box
+            final ftyp = String.fromCharCodes(response.bodyBytes.skip(4).take(4));
+            debugPrint('  - Box类型: $ftyp');
+          }
+        }
+      } else {
+        debugPrint('❌ 视频文件下载失败: ${response.statusCode}');
+      }
+    } catch (e) {
+      debugPrint('❌ 视频下载测试失败: $e');
     }
   }
 
@@ -202,6 +295,72 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> {
                               textAlign: TextAlign.center,
                             ),
                           ),
+                          const SizedBox(height: 16),
+                          // 添加使用外部播放器的选项
+                          if (widget.item.filePath.startsWith('http://') || widget.item.filePath.startsWith('https://'))
+                            Column(
+                              children: [
+                                ElevatedButton.icon(
+                                  onPressed: () async {
+                                    final encodedUrl = _encodeUrl(widget.item.filePath);
+                                    try {
+                                      // 复制URL到剪贴板
+                                      await Clipboard.setData(ClipboardData(text: encodedUrl));
+                                      if (mounted) {
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          const SnackBar(
+                                            content: Text('✅ 视频URL已复制到剪贴板\n\n可以在浏览器或其他播放器中打开'),
+                                            backgroundColor: Colors.green,
+                                            duration: Duration(seconds: 3),
+                                          ),
+                                        );
+                                      }
+                                    } catch (e) {
+                                      debugPrint('复制URL失败: $e');
+                                    }
+                                  },
+                                  icon: const Icon(Icons.copy),
+                                  label: const Text('复制视频链接'),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.blue,
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+                                ElevatedButton.icon(
+                                  onPressed: () async {
+                                    final encodedUrl = _encodeUrl(widget.item.filePath);
+                                    try {
+                                      // 使用share_plus分享URL，用户可以选择用浏览器打开
+                                      await Share.share(
+                                        '${widget.item.title}\n\n$encodedUrl',
+                                        subject: widget.item.title,
+                                      );
+                                    } catch (e) {
+                                      debugPrint('分享失败: $e');
+                                      // 如果分享失败，至少复制到剪贴板
+                                      await Clipboard.setData(ClipboardData(text: encodedUrl));
+                                      if (mounted) {
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          const SnackBar(
+                                            content: Text('✅ URL已复制到剪贴板'),
+                                            backgroundColor: Colors.green,
+                                          ),
+                                        );
+                                      }
+                                    }
+                                  },
+                                  icon: const Icon(Icons.share),
+                                  label: const Text('分享链接（可用浏览器打开）'),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.green,
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                                  ),
+                                ),
+                              ],
+                            ),
                           const SizedBox(height: 16),
                           ElevatedButton(
                             onPressed: () {

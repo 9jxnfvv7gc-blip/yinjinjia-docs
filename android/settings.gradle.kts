@@ -13,10 +13,13 @@ pluginManagement {
     repositories {
         // 优先使用本地 Maven 仓库（包含手动安装的 Flutter 引擎）
         mavenLocal()
+        // Flutter 下载镜像（腾讯云）
+        maven { url = uri("https://mirrors.cloud.tencent.com/download.flutter.io") }
         // 使用国内镜像源
         maven { url = uri("https://maven.aliyun.com/repository/google") }
         maven { url = uri("https://maven.aliyun.com/repository/central") }
         maven { url = uri("https://maven.aliyun.com/repository/gradle-plugin") }
+        maven { url = uri("https://mirrors.cloud.tencent.com/nexus/repository/maven-public/") }
         // 备用源
         google()
         mavenCentral()
