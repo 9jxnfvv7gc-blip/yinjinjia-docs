@@ -17,7 +17,7 @@ from urllib.parse import unquote, parse_qs
 import tempfile
 
 PORT = 8081
-VIDEO_ROOT = os.environ.get("VIDEO_ROOT", "/root/videos")  # 默认 /root/videos，亦可用环境变量覆盖
+VIDEO_ROOT = "/Volumes/Expansion"  # 改成你的视频根目录路径
 
 class VideoHandler(http.server.SimpleHTTPRequestHandler):
     def end_headers(self):
@@ -31,75 +31,6 @@ class VideoHandler(http.server.SimpleHTTPRequestHandler):
     def do_OPTIONS(self):
         self.send_response(200)
         self.end_headers()
-    
-    def do_HEAD(self):
-        """处理HEAD请求，用于检查文件是否存在而不下载内容"""
-        # HEAD请求应该和GET请求使用相同的路径处理逻辑
-        if self.path.startswith('/video/') or self.path.startswith('/music/'):
-            # 提供视频或音乐文件流
-            # 提取媒体路径（去掉 /video/ 或 /music/ 前缀）
-            if self.path.startswith('/video/'):
-                media_path = self.path[7:]  # 去掉 '/video/'
-            else:
-                media_path = self.path[7:]  # 去掉 '/music/'
-            
-            # 解码URL编码的路径
-            decoded_path = unquote(media_path)
-            full_path = os.path.join(VIDEO_ROOT, decoded_path)
-            
-            # 调试信息
-            import sys
-            sys.stderr.write(f"HEAD请求路径: {self.path}\n")
-            sys.stderr.write(f"提取的media_path: {media_path}\n")
-            sys.stderr.write(f"解码后的路径: {decoded_path}\n")
-            sys.stderr.write(f"完整文件路径: {full_path}\n")
-            sys.stderr.write(f"文件是否存在: {os.path.exists(full_path)}\n")
-            sys.stderr.flush()
-            
-            if os.path.exists(full_path) and os.path.isfile(full_path):
-                self.send_response(200)
-                # 支持媒体文件流式传输
-                ext = os.path.splitext(full_path)[1].lower()
-                content_type = {
-                    # 视频格式
-                    '.mp4': 'video/mp4',
-                    '.mov': 'video/quicktime',
-                    '.mkv': 'video/x-matroska',
-                    '.avi': 'video/x-msvideo',
-                    '.rmvb': 'video/vnd.rn-realvideo',
-                    '.rm': 'video/vnd.rn-realvideo',
-                    '.wmv': 'video/x-ms-wmv',
-                    '.flv': 'video/x-flv',
-                    '.f4v': 'video/x-f4v',
-                    '.m4v': 'video/x-m4v',
-                    '.mpg': 'video/mpeg',
-                    '.mpeg': 'video/mpeg',
-                    '.3gp': 'video/3gpp',
-                    '.webm': 'video/webm',
-                    '.ts': 'video/mp2t',
-                    '.mts': 'video/mp2t',
-                    '.vob': 'video/dvd',
-                    '.divx': 'video/x-divx',
-                    '.xvid': 'video/x-divx',
-                    # 音乐格式
-                    '.mp3': 'audio/mpeg',
-                    '.m4a': 'audio/mp4',
-                    '.flac': 'audio/flac',
-                    '.wav': 'audio/wav',
-                    '.aac': 'audio/aac',
-                    '.ogg': 'audio/ogg',
-                    '.wma': 'audio/x-ms-wma',
-                }.get(ext, 'application/octet-stream')
-                self.send_header('Content-type', content_type)
-                self.send_header('Accept-Ranges', 'bytes')
-                file_size = os.path.getsize(full_path)
-                self.send_header('Content-Length', str(file_size))
-                self.end_headers()
-            else:
-                self.send_error(404, "File not found")
-        else:
-            # 其他路径使用父类默认处理
-            super().do_HEAD()
 
     def do_POST(self):
         if self.path == '/api/upload':
@@ -207,7 +138,7 @@ class VideoHandler(http.server.SimpleHTTPRequestHandler):
                 
                 if not os.path.exists(source_file) or not os.path.isfile(source_file):
                     print(f"源文件不存在: {source_file}")
-                    self.send_error(404, "Source file not found")
+                    self.send_error(404, f"Source file not found: {source_file}")
                     return
                 
                 # 构建目标路径
@@ -265,125 +196,39 @@ class VideoHandler(http.server.SimpleHTTPRequestHandler):
                     return
                 
                 # 解析文件路径（可能是相对路径或绝对路径）
-                import sys
-                sys.stderr.write(f"收到删除请求: file_path={file_path}\n")
-                sys.stderr.flush()
+                print(f"收到删除请求: file_path={file_path}")
                 
                 if file_path.startswith('/video/') or file_path.startswith('/music/'):
                     # 从 URL 路径转换为文件系统路径
                     relative_path = file_path.replace('/video/', '').replace('/music/', '')
                     target_file = os.path.join(VIDEO_ROOT, unquote(relative_path))
-                    sys.stderr.write(f"方法1: URL路径格式, relative_path={relative_path}\n")
                 elif file_path.startswith(VIDEO_ROOT):
                     target_file = file_path
-                    sys.stderr.write(f"方法2: 绝对路径格式\n")
                 else:
                     # 假设是相对路径（去掉开头的 /）
                     if file_path.startswith('/'):
                         file_path = file_path[1:]
                     target_file = os.path.join(VIDEO_ROOT, unquote(file_path))
-                    sys.stderr.write(f"方法3: 相对路径格式, file_path={file_path}\n")
                 
                 # 标准化路径（处理 .. 和 .）
                 target_file = os.path.normpath(target_file)
                 
                 # 安全检查：确保文件在 VIDEO_ROOT 目录下
-                abs_video_root = os.path.abspath(VIDEO_ROOT)
-                abs_target_file = os.path.abspath(target_file)
-                
-                if not abs_target_file.startswith(abs_video_root):
-                    sys.stderr.write(f"安全错误：尝试删除 VIDEO_ROOT 外的文件\n")
-                    sys.stderr.write(f"  VIDEO_ROOT: {abs_video_root}\n")
-                    sys.stderr.write(f"  target_file: {abs_target_file}\n")
-                    sys.stderr.flush()
+                if not target_file.startswith(os.path.abspath(VIDEO_ROOT)):
+                    print(f"安全错误：尝试删除 VIDEO_ROOT 外的文件: {target_file}")
                     self.send_error(403, "Access denied")
                     return
                 
-                sys.stderr.write(f"解析后的文件路径: {target_file}\n")
-                sys.stderr.write(f"文件是否存在: {os.path.exists(target_file)}\n")
-                sys.stderr.write(f"是否为文件: {os.path.isfile(target_file) if os.path.exists(target_file) else 'N/A'}\n")
-                sys.stderr.write(f"文件权限: {oct(os.stat(target_file).st_mode) if os.path.exists(target_file) else 'N/A'}\n")
-                sys.stderr.flush()
+                print(f"解析后的文件路径: {target_file}")
                 
-                if not os.path.exists(target_file):
-                    sys.stderr.write(f"文件不存在，尝试模糊匹配: {target_file}\n")
-                    sys.stderr.flush()
-                    
-                    # 尝试模糊匹配：如果路径不完整，查找包含该路径的文件
-                    target_dir = os.path.dirname(target_file)
-                    target_basename = os.path.basename(target_file).strip()
-                    
-                    if os.path.exists(target_dir) and target_basename:
-                        # 在目录中查找包含该basename的文件
-                        try:
-                            files = os.listdir(target_dir)
-                            matched_files = [f for f in files if target_basename in f and os.path.isfile(os.path.join(target_dir, f))]
-                            
-                            if len(matched_files) == 1:
-                                # 找到唯一匹配的文件
-                                target_file = os.path.join(target_dir, matched_files[0])
-                                sys.stderr.write(f"✅ 模糊匹配成功: {target_file}\n")
-                                sys.stderr.flush()
-                            elif len(matched_files) > 1:
-                                # 多个匹配，尝试精确匹配（去掉末尾空格）
-                                exact_match = [f for f in matched_files if f.strip().startswith(target_basename.strip())]
-                                if len(exact_match) == 1:
-                                    target_file = os.path.join(target_dir, exact_match[0])
-                                    sys.stderr.write(f"✅ 精确匹配成功: {target_file}\n")
-                                    sys.stderr.flush()
-                                else:
-                                    sys.stderr.write(f"⚠️ 找到多个匹配文件: {matched_files}\n")
-                                    sys.stderr.flush()
-                        except Exception as match_error:
-                            sys.stderr.write(f"模糊匹配失败: {match_error}\n")
-                            sys.stderr.flush()
-                    
-                    # 如果仍然不存在，返回404
-                    if not os.path.exists(target_file):
-                        sys.stderr.write(f"文件不存在: {target_file}\n")
-                        sys.stderr.flush()
-                        self.send_error(404, "File not found")
-                        return
-                
-                if not os.path.isfile(target_file):
-                    sys.stderr.write(f"不是文件: {target_file}\n")
-                    sys.stderr.flush()
-                    self.send_error(400, "Not a file")
+                if not os.path.exists(target_file) or not os.path.isfile(target_file):
+                    print(f"文件不存在: {target_file}")
+                    self.send_error(404, f"File not found: {target_file}")
                     return
-                
-                # 检查文件权限
-                if not os.access(target_file, os.W_OK):
-                    sys.stderr.write(f"文件不可写，尝试修复权限...\n")
-                    sys.stderr.flush()
-                    try:
-                        os.chmod(target_file, 0o644)
-                        os.chown(target_file, 0, 0)  # root:root
-                    except Exception as perm_error:
-                        sys.stderr.write(f"修复权限失败: {perm_error}\n")
-                        sys.stderr.flush()
                 
                 # 删除文件
-                try:
-                    os.remove(target_file)
-                    sys.stderr.write(f"✅ 成功删除文件: {target_file}\n")
-                    sys.stderr.flush()
-                except PermissionError as e:
-                    sys.stderr.write(f"❌ 权限错误: {e}\n")
-                    sys.stderr.flush()
-                    # 只发送ASCII错误消息，避免编码问题
-                    error_msg = str(e).encode('ascii', 'ignore').decode('ascii') or "Permission denied"
-                    self.send_error(500, f"Permission denied: {error_msg}")
-                    return
-                except Exception as e:
-                    sys.stderr.write(f"❌ 删除失败: {type(e).__name__}: {e}\n")
-                    sys.stderr.write(f"错误详情: {str(e)}\n")
-                    import traceback
-                    sys.stderr.write(f"堆栈跟踪:\n{traceback.format_exc()}\n")
-                    sys.stderr.flush()
-                    # 只发送ASCII错误消息，避免编码问题
-                    error_msg = str(e).encode('ascii', 'ignore').decode('ascii') or "Delete failed"
-                    self.send_error(500, f"Delete failed: {error_msg}")
-                    return
+                os.remove(target_file)
+                print(f"成功删除文件: {target_file}")
                 
                 # 返回成功响应
                 self.send_response(200)
@@ -396,15 +241,10 @@ class VideoHandler(http.server.SimpleHTTPRequestHandler):
                 self.wfile.write(json.dumps(response, ensure_ascii=False).encode('utf-8'))
                 
             except Exception as e:
-                import sys
                 import traceback
-                sys.stderr.write(f"❌ 删除文件外层异常: {type(e).__name__}: {e}\n")
-                sys.stderr.write(f"错误详情: {str(e)}\n")
-                sys.stderr.write(f"堆栈跟踪:\n{traceback.format_exc()}\n")
-                sys.stderr.flush()
-                # 只发送ASCII错误消息，避免编码问题
-                error_msg = str(e).encode('ascii', 'ignore').decode('ascii') or "Delete failed"
-                self.send_error(500, f"Delete failed: {error_msg}")
+                print(f"删除文件错误: {e}")
+                traceback.print_exc()
+                self.send_error(500, f"Delete failed: {str(e)}")
         elif self.path == '/api/info':
             # 获取文件信息
             try:
@@ -525,7 +365,7 @@ class VideoHandler(http.server.SimpleHTTPRequestHandler):
                     print(f"目录是否存在: {os.path.exists(os.path.dirname(target_file))}")
                     if os.path.exists(os.path.dirname(target_file)):
                         print(f"目录内容: {os.listdir(os.path.dirname(target_file))}")
-                    self.send_error(404, "File not found")
+                    self.send_error(404, f"File not found: {target_file}")
                     return
                 
                 if not os.path.isfile(target_file):
@@ -966,26 +806,11 @@ class VideoHandler(http.server.SimpleHTTPRequestHandler):
             
         elif self.path.startswith('/video/') or self.path.startswith('/music/'):
             # 提供视频或音乐文件流
-            # 提取媒体路径（去掉 /video/ 或 /music/ 前缀）
-            if self.path.startswith('/video/'):
-                media_path = self.path[7:]  # 去掉 '/video/'
-            else:
-                media_path = self.path[7:]  # 去掉 '/music/'
-            
-            # 解码URL编码的路径
-            decoded_path = unquote(media_path)
-            full_path = os.path.join(VIDEO_ROOT, decoded_path)
-            
-            # 调试信息
-            import sys
-            sys.stderr.write(f"视频请求路径: {self.path}\n")
-            sys.stderr.write(f"提取的media_path: {media_path}\n")
-            sys.stderr.write(f"解码后的路径: {decoded_path}\n")
-            sys.stderr.write(f"完整文件路径: {full_path}\n")
-            sys.stderr.write(f"文件是否存在: {os.path.exists(full_path)}\n")
-            sys.stderr.flush()
+            media_path = self.path.replace('/video/', '').replace('/music/', '')
+            full_path = os.path.join(VIDEO_ROOT, unquote(media_path))
             
             if os.path.exists(full_path) and os.path.isfile(full_path):
+                self.send_response(200)
                 # 支持媒体文件流式传输
                 ext = os.path.splitext(full_path)[1].lower()
                 content_type = {
@@ -1018,7 +843,10 @@ class VideoHandler(http.server.SimpleHTTPRequestHandler):
                     '.ogg': 'audio/ogg',
                     '.wma': 'audio/x-ms-wma',
                 }.get(ext, 'application/octet-stream')
+                self.send_header('Content-type', content_type)
+                self.send_header('Accept-Ranges', 'bytes')
                 
+                # 支持范围请求（视频/音频拖动）
                 range_header = self.headers.get('Range', '')
                 file_size = os.path.getsize(full_path)
                 
@@ -1029,31 +857,19 @@ class VideoHandler(http.server.SimpleHTTPRequestHandler):
                     end = int(range_match[1]) if range_match[1] else file_size - 1
                     
                     self.send_response(206)  # Partial Content
-                    self.send_header('Content-type', content_type)
-                    self.send_header('Accept-Ranges', 'bytes')
                     self.send_header('Content-Range', f'bytes {start}-{end}/{file_size}')
                     self.send_header('Content-Length', str(end - start + 1))
                     self.end_headers()
                     
                     with open(full_path, 'rb') as f:
                         f.seek(start)
-                        remaining = end - start + 1
-                        chunk_size = 64 * 1024
-                        while remaining > 0:
-                            chunk = f.read(min(chunk_size, remaining))
-                            if not chunk:
-                                break
-                            self.wfile.write(chunk)
-                            remaining -= len(chunk)
+                        self.wfile.write(f.read(end - start + 1))
                 else:
                     # 完整文件
-                    self.send_response(200)
-                    self.send_header('Content-type', content_type)
-                    self.send_header('Accept-Ranges', 'bytes')
                     self.send_header('Content-Length', str(file_size))
                     self.end_headers()
                     with open(full_path, 'rb') as f:
-                        shutil.copyfileobj(f, self.wfile)
+                        self.wfile.write(f.read())
             else:
                 self.send_error(404, "File not found")
         else:
@@ -1101,11 +917,7 @@ if __name__ == "__main__":
     print(f"在 Flutter App 中输入服务器地址: http://{local_ip}:{PORT}")
     print(f"\n按 Ctrl+C 停止服务器")
     
-    # 使用SO_REUSEADDR选项，允许立即重用端口
-    class ReusableTCPServer(socketserver.TCPServer):
-        allow_reuse_address = True
-    
-    with ReusableTCPServer(("", PORT), VideoHandler) as httpd:
+    with socketserver.TCPServer(("", PORT), VideoHandler) as httpd:
         try:
             httpd.serve_forever()
         except KeyboardInterrupt:

@@ -1,0 +1,28 @@
+{
+  "@@locale": "en",
+  "appName": "Little Boat",
+  "@appName": {
+    "description": "Application name"
+  },
+  "userAgreement": "User Agreement",
+  "@userAgreement": {
+    "description": "User agreement title"
+  },
+  "privacyPolicy": "Privacy Policy",
+  "@privacyPolicy": {
+    "description": "Privacy policy title"
+  },
+  "agree": "Agree",
+  "@agree": {
+    "description": "Agree button"
+  },
+  "disagree": "Disagree",
+  "@disagree": {
+    "description": "Disagree button"
+  },
+  "close": "Close",
+  "@close": {
+    "description": "Close button"
+  }
+}
+
