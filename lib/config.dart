@@ -12,8 +12,11 @@ class AppConfig {
   /// 生产环境API服务器地址（香港服务器）- 用于iOS和海外市场
   static const String productionApiUrl = 'http://47.243.177.166:8081';
   
-  /// 北京服务器地址（用于Android和国内市场）
+  /// 北京服务器地址（用于Android和国内市场）- 视频服务器
   static const String beijingApiUrl = 'http://39.107.137.136:8081';
+  
+  /// 北京链接服务器地址（用于Android国内版 - 只提供链接列表）
+  static const String beijingLinkApiUrl = 'http://39.107.137.136:8082';
   
   /// 开发环境API服务器地址（本地开发）
   static const String developmentApiUrl = 'http://localhost:8081';

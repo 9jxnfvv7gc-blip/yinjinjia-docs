@@ -2,10 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'dart:async';
 import 'dart:io';
+import 'package:package_info_plus/package_info_plus.dart';
 
 // 条件导入：Web平台使用stub，其他平台使用完整版本
-import 'video_page.dart' if (dart.library.html) 'video_page_stub.dart';
-import 'music_page.dart' if (dart.library.html) 'music_page_stub.dart';
+// 注意：video_page.dart 和 music_page.dart 只在备用的 HomePage 中使用
+// Android版本使用 SimpleHomePageLinks，不需要这些导入
+// import 'video_page.dart' if (dart.library.html) 'video_page_stub.dart';
+// import 'music_page.dart' if (dart.library.html) 'music_page_stub.dart';
 import 'simple_home_page.dart'; // 简化版界面
 import 'simple_home_page_safe.dart'; // 安全版本（带视频播放和上传功能，用于 Google Play）
 import 'simple_home_page_links.dart'; // 链接版本（只显示链接，用于国内上架）
@@ -137,10 +140,13 @@ class _SafeStartupPageState extends State<_SafeStartupPage> {
   bool _isReady = false;
   bool _hasAgreed = false;
   String? _error;
+  String? _packageName; // 存储包名，用于判断使用哪个版本
 
   @override
   void initState() {
     super.initState();
+    // 获取包名（用于判断Android版本）
+    _getPackageName();
     // 简化初始化：先直接进入主页，延迟显示弹窗
     // 这样可以确保应用不会因为弹窗问题而闪退
     Future.delayed(const Duration(milliseconds: 500), () {
@@ -152,6 +158,27 @@ class _SafeStartupPageState extends State<_SafeStartupPage> {
         _checkAndShowDialog();
       }
     });
+  }
+
+  /// 获取包名
+  Future<void> _getPackageName() async {
+    try {
+      if (Platform.isAndroid) {
+        final packageInfo = await PackageInfo.fromPlatform();
+        if (mounted) {
+          setState(() {
+            _packageName = packageInfo.packageName;
+          });
+          if (kDebugMode) {
+            print('📦 包名: $_packageName');
+          }
+        }
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        print('⚠️ 获取包名失败: $e');
+      }
+    }
   }
 
   /// 检查并显示协议弹窗（分离为独立方法，避免在回调中使用 async）
@@ -303,13 +330,25 @@ class _SafeStartupPageState extends State<_SafeStartupPage> {
     return Builder(
       builder: (context) {
         try {
-          // 根据平台选择版本：
-          // - Android：使用链接版本（用于国内上架，个人开发者）
-          // - iOS：使用安全版本（带视频播放功能，可用于 App Store）
-          // - 其他平台：使用安全版本
+          // 根据平台和包名选择版本：
+          // - iOS：始终使用安全版本（带视频播放和上传功能）
+          // - Android Google Play版本（包名包含googleplay）：使用安全版本（完整功能）
+          // - Android 中国商店版本（包名包含domestic）：使用链接版本（只转发链接）
           if (Platform.isAndroid) {
-            // Android 使用链接版本（适合国内上架）
-            return const SimpleHomePageLinks();
+            // 根据包名判断使用哪个版本
+            if (_packageName != null && _packageName!.contains('googleplay')) {
+              // Google Play版本：完整功能（上传视频）
+              if (kDebugMode) {
+                print('📱 使用Google Play版本（完整功能）');
+              }
+              return const SimpleHomePageSafe();
+            } else {
+              // 中国商店版本：链接版本（只转发链接）
+              if (kDebugMode) {
+                print('📱 使用中国商店版本（链接版本）');
+              }
+              return const SimpleHomePageLinks();
+            }
           } else {
             // iOS 和其他平台使用安全版本（带视频播放和上传功能）
             return const SimpleHomePageSafe();
@@ -407,8 +446,10 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
       body: TabBarView(
         controller: _tabController,
         children: [
-          VideoPage(),
-          MusicPage(),
+          // VideoPage(),  // 已注释：Android版本不需要
+          // MusicPage(),  // 已注释：Android版本不需要
+          const Center(child: Text('此页面已停用')),
+          const Center(child: Text('此页面已停用')),
         ],
       ),
     );

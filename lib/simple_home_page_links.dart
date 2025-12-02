@@ -8,14 +8,15 @@ import 'package:http/http.dart' as http;
 import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'config.dart';
-// 链接版本不需要播放器页面
-// import 'video_player_page.dart';
-// import 'music_player_page.dart';
+// 链接版本：如果URL是视频文件，可以使用播放器直接播放（无广告）
+import 'video_player_page.dart';
+import 'music_player_page.dart';
 import 'models.dart';
 import 'legal_dialog.dart';
-import 'services/auth_service.dart';
+// Android版本：不需要授权服务（只读模式）
 
-/// 链接版本主页 - 用于国内上架（个人开发者），只显示链接，不包含视频播放和上传功能
+/// 链接版本主页 - Android版本（用于国内上架）
+/// 只显示链接，点击链接跳转到外部浏览器，不包含上传、添加、删除功能
 class SimpleHomePageLinks extends StatefulWidget {
   const SimpleHomePageLinks({super.key});
 
@@ -77,7 +78,7 @@ class _SimpleHomePageLinksState extends State<SimpleHomePageLinks> {
   bool _showSampleContent = false; // 是否显示示例内容
   String? _errorMessage;
   String? _loadingStatus; // 加载状态信息（包括重试信息）
-  bool _isAuthorized = false; // 是否已授权
+  // Android版本：不需要授权状态（只读模式）
   bool _showAllVideos = false;
   bool _showAllMusics = false;
 
@@ -109,17 +110,7 @@ class _SimpleHomePageLinksState extends State<SimpleHomePageLinks> {
           return;
         }
         
-        // 检查授权状态
-        try {
-          _isAuthorized = await AuthService.isAuthorized();
-        } catch (e, stackTrace) {
-          if (kDebugMode) {
-            print('⚠️ 检查授权状态失败: $e');
-            print('📋 堆栈: $stackTrace');
-          }
-          // 如果检查失败，假设未授权，避免崩溃
-          _isAuthorized = false;
-        }
+        // Android版本：不需要检查授权状态（只读模式）
         
         if (mounted) {
           setState(() {});
@@ -383,10 +374,11 @@ class _SimpleHomePageLinksState extends State<SimpleHomePageLinks> {
   /// 加载视频列表
   Future<List<SimpleMediaItem>> _loadVideos() async {
     try {
-      // 使用正确的URL编码
-      final url = AppConfig.listVideosUrl('原创视频');
+      // 国内版使用链接服务器（8082端口）
+      final categoryId = Uri.encodeComponent('video'); // 链接服务器使用 'video' 作为分类ID
+      final url = '${AppConfig.beijingLinkApiUrl}/api/list/$categoryId';
       if (kDebugMode) {
-        print('请求视频列表: $url');
+        print('请求视频列表（链接服务器）: $url');
       }
       final response = await _getWithRetry(url, type: '视频');
 
@@ -448,10 +440,11 @@ class _SimpleHomePageLinksState extends State<SimpleHomePageLinks> {
   /// 加载音乐列表
   Future<List<SimpleMediaItem>> _loadMusics() async {
     try {
-      // 使用正确的URL编码
-      final url = AppConfig.listVideosUrl('原创歌曲');
+      // 国内版使用链接服务器（8082端口）
+      final categoryId = Uri.encodeComponent('music'); // 链接服务器使用 'music' 作为分类ID
+      final url = '${AppConfig.beijingLinkApiUrl}/api/list/$categoryId';
       if (kDebugMode) {
-        print('请求音乐列表: $url');
+        print('请求音乐列表（链接服务器）: $url');
       }
       final response = await _getWithRetry(url, type: '音乐');
 
@@ -510,248 +503,9 @@ class _SimpleHomePageLinksState extends State<SimpleHomePageLinks> {
     return [];
   }
 
-  /// 显示授权对话框
-  void _showAuthDialog(BuildContext context) {
-    final TextEditingController codeController = TextEditingController();
-    bool isLoading = false;
+  // Android版本：移除授权对话框功能（不再需要）
 
-    showDialog(
-      context: context,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: Text(_isAuthorized ? '授权管理' : '输入授权码'),
-          content: _isAuthorized
-              ? Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.verified_user, size: 64, color: Colors.green),
-                    const SizedBox(height: 16),
-                    const Text('您已经是授权用户', style: TextStyle(fontSize: 16)),
-                    const SizedBox(height: 24),
-                    ElevatedButton(
-                      onPressed: () async {
-                        setDialogState(() {
-                          isLoading = true;
-                        });
-                        await AuthService.revokeAuth();
-                        final newAuthStatus = await AuthService.isAuthorized();
-                        setDialogState(() {
-                          isLoading = false;
-                          _isAuthorized = newAuthStatus;
-                        });
-                        if (mounted) {
-                          setState(() {
-                            _isAuthorized = newAuthStatus;
-                          });
-                        }
-                        if (mounted) {
-                          Navigator.of(context).pop();
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('已取消授权')),
-                          );
-                        }
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.red,
-                        foregroundColor: Colors.white,
-                      ),
-                      child: isLoading
-                          ? const SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Text('取消授权'),
-                    ),
-                  ],
-                )
-              : Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Text('请输入授权码以添加链接'),
-                    const SizedBox(height: 16),
-                    TextField(
-                      controller: codeController,
-                      decoration: const InputDecoration(
-                        labelText: '授权码',
-                        hintText: '请输入授权码',
-                        border: OutlineInputBorder(),
-                      ),
-                      obscureText: true,
-                      enabled: !isLoading,
-                    ),
-                  ],
-                ),
-          actions: _isAuthorized
-              ? [
-                  TextButton(
-                    onPressed: () => Navigator.of(context).pop(),
-                    child: const Text('关闭'),
-                  ),
-                ]
-              : [
-                  TextButton(
-                    onPressed: isLoading
-                        ? null
-                        : () => Navigator.of(context).pop(),
-                    child: const Text('取消'),
-                  ),
-                  ElevatedButton(
-                    onPressed: isLoading
-                        ? null
-                        : () async {
-                          final code = codeController.text.trim();
-                          if (code.isEmpty) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('请输入授权码')),
-                            );
-                            return;
-                          }
-
-                          setDialogState(() {
-                            isLoading = true;
-                          });
-
-                          final success = await AuthService.verifyAuthCode(code);
-                          final newAuthStatus = await AuthService.isAuthorized();
-
-                          setDialogState(() {
-                            isLoading = false;
-                            _isAuthorized = newAuthStatus;
-                          });
-
-                          if (mounted) {
-                            setState(() {
-                              _isAuthorized = newAuthStatus;
-                            });
-                          }
-
-                          if (mounted) {
-                            Navigator.of(context).pop();
-
-                            if (success) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text('授权成功！您现在可以添加链接'),
-                                  backgroundColor: Colors.green,
-                                ),
-                              );
-                            } else {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text('授权码错误'),
-                                  backgroundColor: Colors.red,
-                                ),
-                              );
-                            }
-                          }
-                        },
-                    child: isLoading
-                        ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Text('验证'),
-                  ),
-                ],
-        ),
-      ),
-    );
-  }
-
-  /// 显示添加链接对话框
-  void _showAddLinkDialog(BuildContext context) {
-    if (!_isAuthorized) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('您需要先授权才能添加链接')),
-      );
-      return;
-    }
-
-    final TextEditingController titleController = TextEditingController();
-    final TextEditingController urlController = TextEditingController();
-    String selectedType = 'video';
-
-    showDialog(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: const Text('添加链接'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: titleController,
-                  decoration: const InputDecoration(
-                    labelText: '链接标题',
-                    hintText: '请输入链接标题',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: urlController,
-                  decoration: const InputDecoration(
-                    labelText: '链接地址',
-                    hintText: 'https://example.com',
-                    border: OutlineInputBorder(),
-                  ),
-                  keyboardType: TextInputType.url,
-                ),
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    const Text('类型：'),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: SegmentedButton<String>(
-                        segments: const [
-                          ButtonSegment(value: 'video', label: Text('视频')),
-                          ButtonSegment(value: 'music', label: Text('音乐')),
-                        ],
-                        selected: {selectedType},
-                        onSelectionChanged: (Set<String> newSelection) {
-                          setDialogState(() {
-                            selectedType = newSelection.first;
-                          });
-                        },
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('取消'),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                final title = titleController.text.trim();
-                final url = urlController.text.trim();
-                if (title.isEmpty || url.isEmpty) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('请填写标题和链接地址')),
-                  );
-                  return;
-                }
-                // TODO: 实现添加链接到服务器的功能
-                Navigator.of(context).pop();
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('添加链接功能开发中，敬请期待')),
-                );
-              },
-              child: const Text('添加'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+  // Android版本：移除添加链接功能（只读模式，只显示链接）
 
   /// 显示设置对话框
   void _showSettingsDialog(BuildContext context) {
@@ -816,16 +570,19 @@ class _SimpleHomePageLinksState extends State<SimpleHomePageLinks> {
             ),
             const Divider(),
             ListTile(
-              leading: Icon(_isAuthorized ? Icons.verified_user : Icons.lock_outline, 
-                color: _isAuthorized ? Colors.green : Colors.grey),
-              title: Text(_isAuthorized ? '已授权用户' : '授权管理'),
-              subtitle: Text(_isAuthorized ? '您可以添加链接' : '输入授权码以添加链接'),
+              leading: const Icon(Icons.info_outline, color: Colors.green),
+              title: const Text('关于'),
+              subtitle: const Text('查看备案信息'),
               trailing: const Icon(Icons.chevron_right),
               onTap: () {
+                if (kDebugMode) {
+                  print('ℹ️ 点击关于');
+                }
                 Navigator.of(context).pop();
-                _showAuthDialog(context);
+                _showAboutDialog(context);
               },
             ),
+            // Android版本：移除授权管理功能（不再需要添加链接）
             const Divider(),
             // 测试功能：清除同意状态（仅调试模式）
             if (kDebugMode)
@@ -975,13 +732,6 @@ class _SimpleHomePageLinksState extends State<SimpleHomePageLinks> {
                   }
                 },
               ),
-            if (kDebugMode)
-              const Divider(),
-            ListTile(
-              leading: const Icon(Icons.info_outline),
-              title: const Text('关于'),
-              subtitle: const Text('小船 v1.0.0'),
-            ),
           ],
         ),
         actions: [
@@ -994,7 +744,7 @@ class _SimpleHomePageLinksState extends State<SimpleHomePageLinks> {
     );
   }
 
-  /// 打开链接
+  /// 打开链接（Android版本：跳转到外部浏览器）
   Future<void> _playItem(SimpleMediaItem item) async {
     if (item.url.isEmpty) {
       if (!mounted) return;
@@ -1010,22 +760,34 @@ class _SimpleHomePageLinksState extends State<SimpleHomePageLinks> {
     try {
       final uri = Uri.parse(item.url);
       if (await canLaunchUrl(uri)) {
-        await launchUrl(uri, mode: LaunchMode.externalApplication);
+        // Android版本：使用外部浏览器打开链接
+        await launchUrl(
+          uri,
+          mode: LaunchMode.externalApplication, // 在外部浏览器中打开
+        );
+        if (kDebugMode) {
+          print('✅ 已打开链接: ${item.url}');
+        }
       } else {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('无法打开链接: ${item.url}'),
             backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
           ),
         );
       }
     } catch (e) {
+      if (kDebugMode) {
+        print('❌ 打开链接失败: $e');
+      }
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('打开链接失败: $e'),
           backgroundColor: Colors.red,
+          duration: const Duration(seconds: 3),
         ),
       );
     }
@@ -1073,94 +835,75 @@ class _SimpleHomePageLinksState extends State<SimpleHomePageLinks> {
     }
   }
 
-  Future<void> _deleteItem(SimpleMediaItem item) async {
-    if (_showSampleContent) return;
-    final confirmed = await showDialog<bool>(
+  // Android版本：移除删除功能（只读模式）
+
+  /// 显示关于/备案信息对话框
+  void _showAboutDialog(BuildContext context) {
+    showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('确认删除'),
-        content: Text('确定要删除"${item.title}"吗？此操作不可恢复。'),
+        title: const Row(
+          children: [
+            Icon(Icons.info_outline, color: Colors.blue),
+            SizedBox(width: 8),
+            Text('关于小船'),
+          ],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                '小船',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 8),
+              const Text('版本：1.0.0'),
+              const SizedBox(height: 16),
+              const Divider(),
+              const SizedBox(height: 16),
+              const Text(
+                '备案信息',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 8),
+              const Text('开发者：智慧令爱'),
+              const SizedBox(height: 8),
+              const Text('联系方式：zhihuilingai4@outlook.com'),
+              const SizedBox(height: 16),
+              const Text(
+                '软件包名：',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              const Text('com.xiaohui.videomusicapp.domestic'),
+              const SizedBox(height: 16),
+              const Text(
+                '备案说明：',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              const Text(
+                '本应用已按照相关法律法规要求进行备案。'
+                '如需了解更多信息，请联系开发者。',
+                style: TextStyle(fontSize: 12, color: Colors.grey),
+              ),
+            ],
+          ),
+        ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('取消'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('删除'),
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('关闭'),
           ),
         ],
       ),
     );
-    if (confirmed != true || !mounted) return;
-
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => const Center(
-        child: CircularProgressIndicator(),
-      ),
-    );
-
-    try {
-      String filePath = item.url;
-      if (filePath.startsWith('http')) {
-        try {
-          int pathStart = filePath.indexOf('/', filePath.indexOf('://') + 3);
-          if (pathStart > 0) {
-            int queryStart = filePath.indexOf('?', pathStart);
-            int endPos = queryStart > 0 ? queryStart : filePath.length;
-            filePath = filePath.substring(pathStart, endPos);
-          } else {
-            final uri = Uri.parse(filePath);
-            filePath = uri.path;
-          }
-        } catch (e) {
-          final uri = Uri.parse(filePath);
-          filePath = uri.path;
-        }
-      }
-
-      final response = await http
-          .post(
-            Uri.parse(AppConfig.deleteVideoUrl),
-            headers: {'Content-Type': 'application/json'},
-            body: json.encode({'file_path': filePath}),
-          )
-          .timeout(Duration(seconds: AppConfig.requestTimeoutSeconds));
-
-      if (!mounted) return;
-      Navigator.of(context).pop(); // 关闭进度对话框
-
-      if (response.statusCode == 200) {
-        await _tryLoadContent();
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('删除成功！'),
-            backgroundColor: Colors.green,
-          ),
-        );
-      } else {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('删除失败: ${response.statusCode}'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    } catch (e) {
-      if (!mounted) return;
-      Navigator.of(context).pop();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('删除失败: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
-    }
   }
 
   void _showItemMenu(SimpleMediaItem item) {
@@ -1216,18 +959,7 @@ class _SimpleHomePageLinksState extends State<SimpleHomePageLinks> {
                 _copyLink(item);
               },
             ),
-            if (_isAuthorized) ...[
-              const Divider(),
-              ListTile(
-                leading: const Icon(Icons.delete, color: Colors.red),
-                title: const Text('删除'),
-                subtitle: const Text('删除此内容'),
-                onTap: () {
-                  Navigator.pop(context);
-                  _deleteItem(item);
-                },
-              ),
-            ],
+            // Android版本：移除删除功能（只读模式）
             const SizedBox(height: 8),
           ],
         ),
@@ -1257,13 +989,7 @@ class _SimpleHomePageLinksState extends State<SimpleHomePageLinks> {
         title: const Text('小船'),
         backgroundColor: Colors.blue.shade700,
         actions: [
-          // 添加链接按钮（仅授权用户可见）
-          if (_isAuthorized)
-            IconButton(
-              icon: const Icon(Icons.add_link),
-              onPressed: () => _showAddLinkDialog(context),
-              tooltip: '添加链接',
-            ),
+          // Android版本：只保留设置按钮，移除添加链接功能
           IconButton(
             icon: const Icon(Icons.settings, color: Colors.white),
             onPressed: () {
@@ -1611,7 +1337,9 @@ class _ContentSection extends StatelessWidget {
   }) {
     final displayItems = showAll ? items : items.take(5).toList();
     final sampleSubtitle =
-        showSample ? (isVideo ? '示例链接（服务器连接失败）' : '示例链接（服务器连接失败）') : '点击打开链接';
+        showSample 
+            ? (isVideo ? '示例链接（服务器连接失败）' : '示例链接（服务器连接失败）') 
+            : '点击跳转到外部浏览器';
 
     return displayItems
         .map(
@@ -1619,7 +1347,12 @@ class _ContentSection extends StatelessWidget {
             icon: isVideo ? Icons.link : Icons.link,
             title: item.title,
             subtitle: sampleSubtitle,
-            onTap: showSample ? null : () => onPlayItem(item),
+            onTap: showSample 
+                ? null 
+                : () {
+                    // Android版本：点击链接跳转到外部浏览器
+                    onPlayItem(item);
+                  },
             onMenuTap: enableActions ? () => onShowMenu(item) : null,
           ),
         )
