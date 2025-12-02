@@ -13,6 +13,7 @@ import 'simple_home_page.dart'; // 简化版界面
 import 'simple_home_page_safe.dart'; // 安全版本（带视频播放和上传功能，用于 Google Play）
 import 'simple_home_page_links.dart'; // 链接版本（只显示链接，用于国内上架）
 import 'legal_dialog.dart'; // 法律协议弹窗
+import 'config.dart'; // 应用配置
 
 void main() {
   // 设置全局错误处理，防止应用闪退
@@ -172,6 +173,8 @@ class _SafeStartupPageState extends State<_SafeStartupPage> {
           if (kDebugMode) {
             print('📦 包名: $_packageName');
           }
+          // 同时初始化 AppConfig 的包名缓存
+          await AppConfig.initializePackageName();
         }
       }
     } catch (e) {

@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'services/auth_service.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 /// 应用配置文件
 /// 
@@ -21,15 +22,42 @@ class AppConfig {
   /// 开发环境API服务器地址（本地开发）
   static const String developmentApiUrl = 'http://localhost:8081';
   
+  /// 缓存的包名（用于判断版本）
+  static String? _cachedPackageName;
+  
+  /// 设置包名（在应用启动时调用）
+  static Future<void> initializePackageName() async {
+    if (Platform.isAndroid && _cachedPackageName == null) {
+      try {
+        final packageInfo = await PackageInfo.fromPlatform();
+        _cachedPackageName = packageInfo.packageName;
+      } catch (e) {
+        // 如果获取失败，忽略错误
+        _cachedPackageName = null;
+      }
+    }
+  }
+  
   /// 当前使用的API服务器地址
-  /// 根据平台自动选择：
-  /// - Android: 使用北京服务器（国内上架）
+  /// 根据平台和包名自动选择：
+  /// - Android Google Play版本（包名包含googleplay）：使用香港服务器
+  /// - Android 国内版本（包名包含domestic）：使用北京服务器
   /// - iOS: 使用香港服务器（App Store上架）
   /// - 其他平台: 使用香港服务器
   static String get apiBaseUrl {
     // 根据平台选择服务器
     if (Platform.isAndroid) {
-      // Android应用使用北京服务器（用于国内应用市场上架）
+      // 检查包名，判断是Google Play版本还是国内版本
+      if (_cachedPackageName != null) {
+        if (_cachedPackageName!.contains('googleplay')) {
+          // Google Play版本：使用香港服务器
+          return productionApiUrl;  // http://47.243.177.166:8081
+        } else if (_cachedPackageName!.contains('domestic')) {
+          // 国内版本：使用北京服务器
+          return beijingApiUrl;  // http://39.107.137.136:8081
+        }
+      }
+      // 如果无法判断包名，默认使用北京服务器（兼容旧版本）
       return beijingApiUrl;  // http://39.107.137.136:8081
     } else if (Platform.isIOS) {
       // iOS应用使用香港服务器（用于App Store上架）

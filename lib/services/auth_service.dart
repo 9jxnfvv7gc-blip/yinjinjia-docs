@@ -1,5 +1,5 @@
 import 'package:flutter/foundation.dart';
-import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// 授权管理服务
 class AuthService {
@@ -8,15 +8,12 @@ class AuthService {
   
   // 默认授权码（生产环境应该从服务器获取或使用更安全的方式）
   static const String _defaultAuthCode = 'yingyinjia2025';
-  
-  // 使用自定义 MethodChannel 替代 SharedPreferences（避免冷启动崩溃）
-  static const MethodChannel _channel = MethodChannel('auth_prefs');
 
   /// 检查用户是否已授权
   static Future<bool> isAuthorized() async {
     try {
-      final result = await _channel.invokeMethod<bool>('getBool', {'key': _authKey});
-      return result ?? false;
+      final prefs = await SharedPreferences.getInstance();
+      return prefs.getBool(_authKey) ?? false;
     } catch (e) {
       if (kDebugMode) {
         print('检查授权状态失败: $e');
@@ -47,9 +44,10 @@ class AuthService {
       print('   最终匹配结果: $isMatch');
       
       if (isMatch) {
-        // 使用自定义 MethodChannel 保存授权状态
-        await _channel.invokeMethod('setBool', {'key': _authKey, 'value': true});
-        await _channel.invokeMethod('setString', {'key': _authCodeKey, 'value': cleanedCode});
+        // 使用 SharedPreferences 保存授权状态
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setBool(_authKey, true);
+        await prefs.setString(_authCodeKey, cleanedCode);
         print('✅ 授权成功');
         return true;
       } else {
@@ -78,8 +76,9 @@ class AuthService {
   /// 取消授权
   static Future<void> revokeAuth() async {
     try {
-      await _channel.invokeMethod('setBool', {'key': _authKey, 'value': false});
-      await _channel.invokeMethod('remove', {'key': _authCodeKey});
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_authKey, false);
+      await prefs.remove(_authCodeKey);
       if (kDebugMode) {
         print('已取消授权');
       }
